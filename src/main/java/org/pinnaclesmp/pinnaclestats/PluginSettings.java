@@ -12,6 +12,7 @@ public record PluginSettings(
         List<String> allowedOrigins,
         int cacheSeconds,
         String worldName,
+        String statsFolderPath,
         int refreshIntervalMinutes,
         boolean refreshOnPlayerQuit,
         boolean refreshOnServerStop,
@@ -56,6 +57,7 @@ public record PluginSettings(
                 Collections.unmodifiableList(origins),
                 Math.max(0, config.getInt("api.cache-seconds", 60)),
                 config.getString("stats.world-name", "world"),
+                normalizePath(config.getString("stats.folder-path", config.getString("stats.world-name", "world") + "/players/stats")),
                 Math.max(0, config.getInt("stats.refresh-interval-minutes", 15)),
                 config.getBoolean("stats.refresh-on-player-quit", true),
                 config.getBoolean("stats.refresh-on-server-stop", true),
@@ -78,6 +80,11 @@ public record PluginSettings(
                 config.getString("github.committer-name", "PinnacleStats"),
                 config.getString("github.committer-email", "pinnaclestats@users.noreply.github.com")
         );
+    }
+
+    private static String normalizePath(String text) {
+        if (text == null || text.isBlank()) return "world/players/stats";
+        return text.trim().replace("\\", "/");
     }
 
     private static String trimSlashes(String text) {

@@ -1,6 +1,6 @@
 # PinnacleStats configuration
 # Recommended mode for Pinnacle SMP GitHub Pages:
-# - The plugin reads <world>/stats/<uuid>.json.
+# - The plugin reads world/players/stats/<uuid>.json by default.
 # - The plugin creates clean JSON files.
 # - Optional GitHub publishing commits those JSON files to your existing website repo.
 # - Your website fetches those JSON files from the same domain, so no proxy or extra service is needed.
@@ -17,8 +17,11 @@ api:
   cache-seconds: 60
 
 stats:
-  # Main world folder. The plugin reads <world>/stats/<uuid>.json.
+  # Main world folder name kept for compatibility.
   world-name: "world"
+  # Exact folder containing <uuid>.json stat files.
+  # For your Bisect/Paper setup, this should be world/players/stats.
+  folder-path: "world/players/stats"
   # How often the plugin refreshes, exports, and optionally publishes new website JSON.
   # 15 minutes is recommended to avoid excessive GitHub commits.
   refresh-interval-minutes: 15

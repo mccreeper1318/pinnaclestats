@@ -133,7 +133,7 @@ public final class StatsCache {
     }
 
     private File statsFolder(PluginSettings cfg) {
-        return new File(cfg.worldName(), "stats");
+        return new File(cfg.statsFolderPath());
     }
 
     @SuppressWarnings("unchecked")
