@@ -3,11 +3,11 @@ version: ${version}
 main: org.pinnaclesmp.pinnaclestats.PinnacleStatsPlugin
 api-version: '26.2'
 author: Pinnacle SMP
-description: Exposes formatted Minecraft player statistics for Pinnacle SMP member profiles.
+description: Exports formatted Minecraft player statistics for Pinnacle SMP member profiles.
 commands:
   pstats:
-    description: Manage PinnacleStats exports and API cache.
-    usage: /pstats <status|reload|refresh|debug>
+    description: Manage PinnacleStats cache, local exports, GitHub publishing, and optional API.
+    usage: /pstats <status|reload|refresh|export|publish|debug>
     permission: pinnaclestats.admin
 permissions:
   pinnaclestats.admin:

@@ -47,6 +47,15 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
                 }
                 return true;
             }
+            case "export", "publish" -> {
+                StatsExporter.ExportResult result = plugin.exportNow();
+                if (result.success()) {
+                    sender.sendMessage("§aPinnacleStats export complete. Files: §f" + result.fileCount() + "§a. " + result.message());
+                } else {
+                    sender.sendMessage("§cPinnacleStats export failed: " + result.message());
+                }
+                return true;
+            }
             case "debug" -> {
                 if (args.length < 2) {
                     sender.sendMessage("§eUsage: /pstats debug <player|uuid>");
@@ -56,7 +65,7 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
             default -> {
-                sender.sendMessage("§eUsage: /pstats <status|reload|refresh|debug>");
+                sender.sendMessage("§eUsage: /pstats <status|reload|refresh|export|publish|debug>");
                 return true;
             }
         }
@@ -69,6 +78,13 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§7Stats folder: §f" + plugin.statsCache().statsFolder().getPath());
         sender.sendMessage("§7Loaded players: §f" + plugin.statsCache().size());
         sender.sendMessage("§7Last refresh: §f" + plugin.statsCache().lastRefresh());
+        if (plugin.statsExporter() != null) {
+            sender.sendMessage("§7Last export: §f" + plugin.statsExporter().lastExport());
+            sender.sendMessage("§7GitHub publish: §f" + plugin.statsExporter().lastPublishResult());
+            if (!plugin.statsExporter().lastExportError().isBlank()) {
+                sender.sendMessage("§cLast export error: " + plugin.statsExporter().lastExportError());
+            }
+        }
         if (!plugin.statsCache().lastError().isBlank()) {
             sender.sendMessage("§cLast error: " + plugin.statsCache().lastError());
         }
@@ -87,6 +103,7 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§7UUID: §f" + p.uuid());
         sender.sendMessage("§7Updated: §f" + p.lastUpdated());
         sender.sendMessage("§7API URL: §f/api/player/" + p.name());
+        sender.sendMessage("§7Static JSON: §fassets/player-stats/players/" + p.name().replaceAll("[^A-Za-z0-9_\\-]", "_") + ".json");
     }
 
     private UUID tryUuid(String text) {
@@ -97,7 +114,7 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (!sender.hasPermission("pinnaclestats.admin")) return List.of();
         if (args.length == 1) {
-            return filter(Arrays.asList("status", "reload", "refresh", "debug"), args[0]);
+            return filter(Arrays.asList("status", "reload", "refresh", "export", "publish", "debug"), args[0]);
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("refresh") || args[0].equalsIgnoreCase("debug"))) {
             List<String> names = new ArrayList<>();

@@ -1,12 +1,16 @@
 # PinnacleStats configuration
-# The API uses one port for every player's profile data.
+# Recommended mode for Pinnacle SMP GitHub Pages:
+# - The plugin reads <world>/stats/<uuid>.json.
+# - The plugin creates clean JSON files.
+# - Optional GitHub publishing commits those JSON files to your existing website repo.
+# - Your website fetches those JSON files from the same domain, so no proxy or extra service is needed.
 
 api:
-  enabled: true
+  # Leave this false for the GitHub Pages/static JSON setup.
+  # You may turn it on only for direct testing from a browser using http://SERVER_IP:1042/api/health.
+  enabled: false
   host: "0.0.0.0"
-  port: 8123
-  # Only these sites may fetch data from a browser.
-  # Keep these as your real website domains.
+  port: 1042
   allowed-origins:
     - "https://www.pinnaclesmp.org"
     - "https://pinnaclesmp.org"
@@ -15,8 +19,9 @@ api:
 stats:
   # Main world folder. The plugin reads <world>/stats/<uuid>.json.
   world-name: "world"
-  # Refresh cache every X minutes. Use 0 to disable scheduled refreshes.
-  refresh-interval-minutes: 5
+  # How often the plugin refreshes, exports, and optionally publishes new website JSON.
+  # 15 minutes is recommended to avoid excessive GitHub commits.
+  refresh-interval-minutes: 15
   refresh-on-player-quit: true
   refresh-on-server-stop: true
   max-top-blocks: 5
@@ -27,8 +32,26 @@ privacy:
   include-deaths: true
   include-player-kills: true
 
+export:
+  local-enabled: true
+  local-folder: "plugins/PinnacleStats/export"
+  after-refresh: true
+
+github:
+  # Turn this on after you create a GitHub token with Contents read/write access for your website repo.
+  enabled: false
+  owner: "YOUR_GITHUB_USERNAME_OR_ORG"
+  repo: "YOUR_WEBSITE_REPO"
+  branch: "main"
+  base-path: "assets/player-stats"
+  token: "PASTE_TOKEN_HERE"
+  commit-message: "Update PinnacleStats player data"
+  committer-name: "PinnacleStats"
+  committer-email: "pinnaclestats@users.noreply.github.com"
+
 players:
-  # Optional overrides if usercache.json cannot resolve a UUID to the display name you use on the website.
+  # Optional overrides if usercache.json cannot resolve a UUID to the Minecraft username you use on the website.
+  # The name outside parentheses on your site is the Minecraft username. Use that here if an override is needed.
   # Format:
   # aliases:
   #   "00000000-0000-0000-0000-000000000000": "McCreeper1318"

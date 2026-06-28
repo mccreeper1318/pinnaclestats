@@ -10,6 +10,7 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
     private PluginSettings settings;
     private StatsCache statsCache;
     private StatsApiServer apiServer;
+    private StatsExporter statsExporter;
     private int refreshTaskId = -1;
     private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
 
@@ -20,6 +21,7 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
 
         this.statsCache = new StatsCache(this, settings);
         this.apiServer = new StatsApiServer(this, settings, statsCache);
+        this.statsExporter = new StatsExporter(this, settings, statsCache);
 
         PluginCommand command = getCommand("pstats");
         if (command != null) {
@@ -51,6 +53,7 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         if (settings != null && settings.refreshOnServerStop() && statsCache != null) {
             try {
                 statsCache.refreshAll();
+                exportAfterRefreshIfEnabled();
             } catch (Exception ex) {
                 getLogger().warning("Could not refresh stats during shutdown: " + ex.getMessage());
             }
@@ -66,6 +69,9 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         reloadPluginSettings();
         if (statsCache != null) {
             statsCache.setSettings(settings);
+        }
+        if (statsExporter != null) {
+            statsExporter.setSettings(settings);
         }
         if (apiServer != null) {
             apiServer.restart(settings);
@@ -89,11 +95,16 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         return apiServer;
     }
 
+    public StatsExporter statsExporter() {
+        return statsExporter;
+    }
+
     public void refreshAsync() {
         if (shuttingDown.get()) return;
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
                 statsCache.refreshAll();
+                exportAfterRefreshIfEnabled();
             } catch (Exception ex) {
                 getLogger().warning("Could not refresh player stats: " + ex.getMessage());
                 ex.printStackTrace();
@@ -106,10 +117,24 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
                 statsCache.refreshOne(player);
+                exportAfterRefreshIfEnabled();
             } catch (Exception ex) {
                 getLogger().warning("Could not refresh stats for " + player + ": " + ex.getMessage());
             }
         });
+    }
+
+    public StatsExporter.ExportResult exportNow() {
+        if (statsExporter == null) {
+            return new StatsExporter.ExportResult(false, 0, "", "Exporter is not initialized.");
+        }
+        return statsExporter.exportAndMaybePublish();
+    }
+
+    private void exportAfterRefreshIfEnabled() {
+        if (settings != null && settings.exportAfterRefresh() && statsExporter != null) {
+            statsExporter.exportAndMaybePublish();
+        }
     }
 
     private void scheduleRefreshTask() {
@@ -127,6 +152,7 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
                 .runTaskTimerAsynchronously(this, () -> {
                     try {
                         statsCache.refreshAll();
+                        exportAfterRefreshIfEnabled();
                     } catch (Exception ex) {
                         getLogger().warning("Scheduled stats refresh failed: " + ex.getMessage());
                     }
