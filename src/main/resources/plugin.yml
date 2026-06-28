@@ -1,7 +1,7 @@
 name: PinnacleStats
 version: ${version}
 main: org.pinnaclesmp.pinnaclestats.PinnacleStatsPlugin
-api-version: '26.2'
+api-version: '1.21'
 author: Pinnacle SMP
 description: Exports formatted Minecraft player statistics for Pinnacle SMP member profiles.
 commands:
