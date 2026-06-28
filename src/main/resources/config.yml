@@ -52,10 +52,13 @@ github:
   committer-name: "PinnacleStats"
   committer-email: "pinnaclestats@users.noreply.github.com"
 
+# Optional overrides if usercache.json cannot resolve a UUID to the Minecraft username you use on the website.
+# The name outside parentheses on your site is the Minecraft username. Use that here if an override is needed.
+# Format:
+# player-name-overrides:
+#   "00000000-0000-0000-0000-000000000000": "McCreeper1318"
+player-name-overrides: {}
+
 players:
-  # Optional overrides if usercache.json cannot resolve a UUID to the Minecraft username you use on the website.
-  # The name outside parentheses on your site is the Minecraft username. Use that here if an override is needed.
-  # Format:
-  # aliases:
-  #   "00000000-0000-0000-0000-000000000000": "McCreeper1318"
+  # Legacy alias location from earlier builds. You can leave this empty.
   aliases: {}

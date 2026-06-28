@@ -37,12 +37,12 @@ public record PluginSettings(
 ) {
     public static PluginSettings fromConfig(FileConfiguration config) {
         Map<String, String> aliases = new HashMap<>();
-        ConfigurationSection aliasSection = config.getConfigurationSection("players.aliases");
-        if (aliasSection != null) {
-            for (String key : aliasSection.getKeys(false)) {
-                aliases.put(key.toLowerCase(Locale.ROOT), aliasSection.getString(key, key));
-            }
-        }
+        // Backward compatible legacy location from earlier builds.
+        loadStringMap(config.getConfigurationSection("players.aliases"), aliases);
+        // Optional nested readable location.
+        loadStringMap(config.getConfigurationSection("players.name-overrides"), aliases);
+        // Preferred v1.0.5 location.
+        loadStringMap(config.getConfigurationSection("player-name-overrides"), aliases);
 
         List<String> origins = new ArrayList<>(config.getStringList("api.allowed-origins"));
         if (origins.isEmpty()) {
@@ -80,6 +80,16 @@ public record PluginSettings(
                 config.getString("github.committer-name", "PinnacleStats"),
                 config.getString("github.committer-email", "pinnaclestats@users.noreply.github.com")
         );
+    }
+
+    private static void loadStringMap(ConfigurationSection section, Map<String, String> target) {
+        if (section == null) return;
+        for (String key : section.getKeys(false)) {
+            String value = section.getString(key, key);
+            if (value != null && !value.isBlank()) {
+                target.put(key.toLowerCase(Locale.ROOT), value.trim());
+            }
+        }
     }
 
     private static String normalizePath(String text) {

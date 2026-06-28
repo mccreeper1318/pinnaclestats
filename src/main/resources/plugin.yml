@@ -1,5 +1,5 @@
 name: PinnacleStats
-version: 1.0.4
+version: 1.0.5
 main: org.pinnaclesmp.pinnaclestats.PinnacleStatsPlugin
 api-version: '1.21'
 author: Pinnacle SMP

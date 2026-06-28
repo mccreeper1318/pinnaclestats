@@ -65,9 +65,16 @@ public final class StatsExporter {
 
         List<Map<String, Object>> indexPlayers = new ArrayList<>();
         for (StatsProfile profile : profiles) {
-            String playerFile = "players/" + safeFileName(profile.name()) + ".json";
+            String safeName = safeFileName(profile.name());
+            String playerFile = null;
             String uuidFile = "players-by-uuid/" + profile.uuid() + ".json";
-            files.put(playerFile, prettyJson(profile.data()));
+
+            // Always keep UUID lookup files, but do not write UUID-named files into /players/.
+            // The website loads /players/<MinecraftUsername>.json, so a UUID filename there is only clutter.
+            if (!isUuidFileName(safeName)) {
+                playerFile = "players/" + safeName + ".json";
+                files.put(playerFile, prettyJson(profile.data()));
+            }
             files.put(uuidFile, prettyJson(profile.data()));
             indexPlayers.add(mapOf(
                     "name", profile.name(),
@@ -91,6 +98,7 @@ public final class StatsExporter {
     private void writeLocalFiles(PluginSettings cfg, Map<String, String> files) throws IOException {
         Path base = Path.of(cfg.localExportFolder());
         Files.createDirectories(base);
+        cleanLocalUuidNamedPlayerFiles(base);
         for (Map.Entry<String, String> entry : files.entrySet()) {
             Path path = base.resolve(entry.getKey()).normalize();
             if (!path.startsWith(base.normalize())) {
@@ -101,12 +109,38 @@ public final class StatsExporter {
         }
     }
 
+    private void cleanLocalUuidNamedPlayerFiles(Path base) throws IOException {
+        Path playersDir = base.resolve("players").normalize();
+        if (!Files.isDirectory(playersDir) || !playersDir.startsWith(base.normalize())) return;
+        try (var stream = Files.list(playersDir)) {
+            for (Path path : stream.toList()) {
+                if (Files.isRegularFile(path) && isUuidFileName(stripJsonExtension(path.getFileName().toString()))) {
+                    Files.deleteIfExists(path);
+                }
+            }
+        }
+    }
+
     public String lastExport() { return lastExport.toString(); }
     public String lastExportError() { return lastExportError; }
     public String lastPublishResult() { return lastPublishResult; }
 
     private String safeFileName(String name) {
         return name.replaceAll("[^A-Za-z0-9_\\-]", "_");
+    }
+
+    private boolean isUuidFileName(String fileNameWithoutExtension) {
+        if (fileNameWithoutExtension == null) return false;
+        try {
+            UUID.fromString(fileNameWithoutExtension);
+            return true;
+        } catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private String stripJsonExtension(String fileName) {
+        return fileName != null && fileName.endsWith(".json") ? fileName.substring(0, fileName.length() - 5) : fileName;
     }
 
     private String prettyJson(Object value) {
