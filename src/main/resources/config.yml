@@ -1,0 +1,35 @@
+# PinnacleStats configuration
+# The API uses one port for every player's profile data.
+
+api:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8123
+  # Only these sites may fetch data from a browser.
+  # Keep these as your real website domains.
+  allowed-origins:
+    - "https://www.pinnaclesmp.org"
+    - "https://pinnaclesmp.org"
+  cache-seconds: 60
+
+stats:
+  # Main world folder. The plugin reads <world>/stats/<uuid>.json.
+  world-name: "world"
+  # Refresh cache every X minutes. Use 0 to disable scheduled refreshes.
+  refresh-interval-minutes: 5
+  refresh-on-player-quit: true
+  refresh-on-server-stop: true
+  max-top-blocks: 5
+  max-top-mobs: 5
+  max-top-items: 5
+
+privacy:
+  include-deaths: true
+  include-player-kills: true
+
+players:
+  # Optional overrides if usercache.json cannot resolve a UUID to the display name you use on the website.
+  # Format:
+  # aliases:
+  #   "00000000-0000-0000-0000-000000000000": "McCreeper1318"
+  aliases: {}
