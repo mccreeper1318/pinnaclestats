@@ -2,7 +2,6 @@ package org.pinnaclesmp.pinnaclestats;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -26,146 +25,178 @@ public final class GitHubPublisher {
             return new PublishResult(false, "GitHub publishing is enabled, but owner/repo/branch/token is missing in config.yml.");
         }
 
-        int updated = 0;
-        int skipped = 0;
-        List<String> errors = new ArrayList<>();
-
-        for (Map.Entry<String, String> entry : relativeFiles.entrySet()) {
-            String repoPath = combinePath(cfg.githubBasePath(), entry.getKey());
-            try {
-                ExistingFile existing = getExistingFile(cfg, repoPath);
-                String base64 = Base64.getEncoder().encodeToString(entry.getValue().getBytes(StandardCharsets.UTF_8));
-
-                if (existing.exists() && existing.contentBase64NoWhitespace().equals(base64)) {
-                    skipped++;
-                    continue;
-                }
-
-                int code = putFile(cfg, repoPath, base64, existing.optionalSha().orElse(null));
-                if (code >= 200 && code < 300) {
-                    updated++;
-                } else {
-                    errors.add(repoPath + " returned HTTP " + code);
-                }
-            } catch (Exception ex) {
-                errors.add(repoPath + ": " + ex.getMessage());
-            }
-        }
-
-        int deleted = 0;
         try {
-            deleted = deleteUuidNamedPlayerFiles(cfg, relativeFiles.keySet());
+            return publishSingleCommit(cfg, relativeFiles);
         } catch (Exception ex) {
-            errors.add("cleanup UUID-named player files: " + ex.getMessage());
-        }
-
-        if (!errors.isEmpty()) {
-            String message = "GitHub publish partially failed. Updated " + updated + ", skipped " + skipped + ", deleted stale UUID player files " + deleted + ", errors: " + String.join("; ", errors);
+            String message = "GitHub publish failed: " + ex.getMessage();
             plugin.getLogger().warning(message);
             return new PublishResult(false, message);
         }
-
-        return new PublishResult(true, "GitHub publish complete. Updated " + updated + ", skipped unchanged " + skipped + ", deleted stale UUID player files " + deleted + ".");
     }
 
+    private PublishResult publishSingleCommit(PluginSettings cfg, Map<String, String> relativeFiles) throws IOException, InterruptedException {
+        String basePath = trimSlashes(cfg.githubBasePath());
 
-    private int deleteUuidNamedPlayerFiles(PluginSettings cfg, Set<String> relativeFiles) throws IOException, InterruptedException {
-        String playersDir = combinePath(cfg.githubBasePath(), "players");
-        List<DirectoryFile> entries = listDirectory(cfg, playersDir);
-        int deleted = 0;
-        for (DirectoryFile file : entries) {
-            if (!"file".equals(file.type())) continue;
-            if (!file.name().endsWith(".json")) continue;
-            String withoutJson = file.name().substring(0, file.name().length() - 5);
+        RefInfo ref = getBranchRef(cfg);
+        CommitInfo baseCommit = getCommit(cfg, ref.commitSha());
+        Map<String, TreeFile> existingFiles = getRecursiveTree(cfg, baseCommit.treeSha());
+
+        List<Map<String, Object>> treeEntries = new ArrayList<>();
+        Set<String> desiredRepoPaths = new HashSet<>();
+
+        for (Map.Entry<String, String> entry : relativeFiles.entrySet()) {
+            String repoPath = combinePath(basePath, entry.getKey());
+            desiredRepoPaths.add(repoPath);
+            treeEntries.add(mapOf(
+                    "path", repoPath,
+                    "mode", "100644",
+                    "type", "blob",
+                    "content", entry.getValue()
+            ));
+        }
+
+        int staleUuidDeletes = 0;
+        String playersPrefix = combinePath(basePath, "players/");
+        for (TreeFile file : existingFiles.values()) {
+            if (!"blob".equals(file.type())) continue;
+            if (!file.path().startsWith(playersPrefix)) continue;
+            String name = file.path().substring(playersPrefix.length());
+            if (name.contains("/")) continue;
+            if (!name.endsWith(".json")) continue;
+            String withoutJson = name.substring(0, name.length() - 5);
             if (!isUuidFileName(withoutJson)) continue;
-
-            String relativePath = "players/" + file.name();
-            if (relativeFiles.contains(relativePath)) continue;
-            int code = deleteFile(cfg, file.path(), file.sha());
-            if (code >= 200 && code < 300) {
-                deleted++;
-            } else {
-                throw new IOException(file.path() + " delete returned HTTP " + code);
-            }
+            if (desiredRepoPaths.contains(file.path())) continue;
+            treeEntries.add(mapOf(
+                    "path", file.path(),
+                    "mode", "100644",
+                    "type", "blob",
+                    "sha", null
+            ));
+            staleUuidDeletes++;
         }
-        return deleted;
+
+        if (treeEntries.isEmpty()) {
+            return new PublishResult(true, "GitHub publish skipped. No files needed publishing.");
+        }
+
+        String newTreeSha = createTree(cfg, baseCommit.treeSha(), treeEntries);
+        if (newTreeSha.equals(baseCommit.treeSha())) {
+            return new PublishResult(true, "GitHub publish skipped. No stat files changed.");
+        }
+
+        String newCommitSha = createCommit(cfg, cfg.githubCommitMessage(), newTreeSha, ref.commitSha());
+        updateBranchRef(cfg, newCommitSha);
+
+        return new PublishResult(true,
+                "GitHub publish complete in one commit. Published " + relativeFiles.size()
+                        + " stat file(s), deleted " + staleUuidDeletes + " stale UUID player file(s).");
     }
 
-    private List<DirectoryFile> listDirectory(PluginSettings cfg, String repoPath) throws IOException, InterruptedException {
-        URI uri = URI.create("https://api.github.com/repos/" + enc(cfg.githubOwner()) + "/" + enc(cfg.githubRepo())
-                + "/contents/" + encodePath(repoPath) + "?ref=" + enc(cfg.githubBranch()));
-        HttpResponse<String> response = client.send(baseRequest(cfg, uri).GET().build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        if (response.statusCode() == 404) return List.of();
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException("GitHub directory GET failed with HTTP " + response.statusCode() + ": " + shorten(response.body()));
-        }
+    private RefInfo getBranchRef(PluginSettings cfg) throws IOException, InterruptedException {
+        URI uri = apiUri(cfg, "/git/ref/" + encodePath("heads/" + cfg.githubBranch()));
+        HttpResponse<String> response = send(cfg, baseRequest(cfg, uri).GET().build());
+        require2xx(response, "GitHub branch ref GET");
         Object parsed = MiniJson.parse(response.body());
-        if (!(parsed instanceof List<?> list)) return List.of();
-        List<DirectoryFile> files = new ArrayList<>();
+        if (!(parsed instanceof Map<?, ?> map)) throw new IOException("Bad GitHub ref response.");
+        Object object = map.get("object");
+        if (!(object instanceof Map<?, ?> objectMap)) throw new IOException("Bad GitHub ref object response.");
+        Object sha = objectMap.get("sha");
+        if (sha == null || String.valueOf(sha).isBlank()) throw new IOException("GitHub ref did not include a commit sha.");
+        return new RefInfo(String.valueOf(sha));
+    }
+
+    private CommitInfo getCommit(PluginSettings cfg, String commitSha) throws IOException, InterruptedException {
+        URI uri = apiUri(cfg, "/git/commits/" + encSegment(commitSha));
+        HttpResponse<String> response = send(cfg, baseRequest(cfg, uri).GET().build());
+        require2xx(response, "GitHub commit GET");
+        Object parsed = MiniJson.parse(response.body());
+        if (!(parsed instanceof Map<?, ?> map)) throw new IOException("Bad GitHub commit response.");
+        Object tree = map.get("tree");
+        if (!(tree instanceof Map<?, ?> treeMap)) throw new IOException("Bad GitHub commit tree response.");
+        Object treeSha = treeMap.get("sha");
+        if (treeSha == null || String.valueOf(treeSha).isBlank()) throw new IOException("GitHub commit did not include a tree sha.");
+        return new CommitInfo(String.valueOf(treeSha));
+    }
+
+    private Map<String, TreeFile> getRecursiveTree(PluginSettings cfg, String treeSha) throws IOException, InterruptedException {
+        URI uri = apiUri(cfg, "/git/trees/" + encSegment(treeSha) + "?recursive=1");
+        HttpResponse<String> response = send(cfg, baseRequest(cfg, uri).GET().build());
+        require2xx(response, "GitHub tree GET");
+        Object parsed = MiniJson.parse(response.body());
+        if (!(parsed instanceof Map<?, ?> map)) return Map.of();
+        Object tree = map.get("tree");
+        if (!(tree instanceof List<?> list)) return Map.of();
+        Map<String, TreeFile> files = new LinkedHashMap<>();
         for (Object item : list) {
-            if (!(item instanceof Map<?, ?> map)) continue;
-            Object name = map.get("name");
-            Object path = map.get("path");
-            Object sha = map.get("sha");
-            Object type = map.get("type");
-            if (name == null || path == null || sha == null || type == null) continue;
-            files.add(new DirectoryFile(String.valueOf(name), String.valueOf(path), String.valueOf(sha), String.valueOf(type)));
+            if (!(item instanceof Map<?, ?> itemMap)) continue;
+            Object path = itemMap.get("path");
+            Object type = itemMap.get("type");
+            Object sha = itemMap.get("sha");
+            if (path == null || type == null || sha == null) continue;
+            files.put(String.valueOf(path), new TreeFile(String.valueOf(path), String.valueOf(type), String.valueOf(sha)));
         }
         return files;
     }
 
-    private int deleteFile(PluginSettings cfg, String repoPath, String sha) throws IOException, InterruptedException {
-        URI uri = URI.create("https://api.github.com/repos/" + enc(cfg.githubOwner()) + "/" + enc(cfg.githubRepo())
-                + "/contents/" + encodePath(repoPath));
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("message", cfg.githubCommitMessage() + " - remove stale UUID player stat file");
-        body.put("sha", sha);
-        body.put("branch", cfg.githubBranch());
-        body.put("committer", mapOf("name", cfg.githubCommitterName(), "email", cfg.githubCommitterEmail()));
-        HttpResponse<String> response = client.send(baseRequest(cfg, uri)
-                .method("DELETE", HttpRequest.BodyPublishers.ofString(MiniJson.stringify(body), StandardCharsets.UTF_8))
-                .build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            plugin.getLogger().warning("GitHub DELETE failed for " + repoPath + " with HTTP " + response.statusCode() + ": " + shorten(response.body()));
-        }
-        return response.statusCode();
-    }
-
-    private ExistingFile getExistingFile(PluginSettings cfg, String repoPath) throws IOException, InterruptedException {
-        URI uri = URI.create("https://api.github.com/repos/" + enc(cfg.githubOwner()) + "/" + enc(cfg.githubRepo())
-                + "/contents/" + encodePath(repoPath) + "?ref=" + enc(cfg.githubBranch()));
-        HttpRequest request = baseRequest(cfg, uri).GET().build();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        if (response.statusCode() == 404) return new ExistingFile(null, null);
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException("GitHub GET failed with HTTP " + response.statusCode() + ": " + shorten(response.body()));
-        }
+    private String createTree(PluginSettings cfg, String baseTreeSha, List<Map<String, Object>> treeEntries) throws IOException, InterruptedException {
+        URI uri = apiUri(cfg, "/git/trees");
+        Map<String, Object> body = mapOf(
+                "base_tree", baseTreeSha,
+                "tree", treeEntries
+        );
+        HttpResponse<String> response = send(cfg, baseRequest(cfg, uri)
+                .POST(HttpRequest.BodyPublishers.ofString(MiniJson.stringify(body), StandardCharsets.UTF_8))
+                .build());
+        require2xx(response, "GitHub create tree");
         Object parsed = MiniJson.parse(response.body());
-        if (!(parsed instanceof Map<?, ?> map)) return new ExistingFile(null, null);
+        if (!(parsed instanceof Map<?, ?> map)) throw new IOException("Bad GitHub create tree response.");
         Object sha = map.get("sha");
-        Object content = map.get("content");
-        return new ExistingFile(sha == null ? null : String.valueOf(sha), content == null ? null : String.valueOf(content));
+        if (sha == null || String.valueOf(sha).isBlank()) throw new IOException("GitHub create tree did not return a sha.");
+        return String.valueOf(sha);
     }
 
-    private int putFile(PluginSettings cfg, String repoPath, String base64Content, String sha) throws IOException, InterruptedException {
-        URI uri = URI.create("https://api.github.com/repos/" + enc(cfg.githubOwner()) + "/" + enc(cfg.githubRepo())
-                + "/contents/" + encodePath(repoPath));
-
+    private String createCommit(PluginSettings cfg, String message, String treeSha, String parentSha) throws IOException, InterruptedException {
+        URI uri = apiUri(cfg, "/git/commits");
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("message", cfg.githubCommitMessage());
-        body.put("content", base64Content);
-        body.put("branch", cfg.githubBranch());
+        body.put("message", message);
+        body.put("tree", treeSha);
+        body.put("parents", List.of(parentSha));
         body.put("committer", mapOf("name", cfg.githubCommitterName(), "email", cfg.githubCommitterEmail()));
-        if (sha != null && !sha.isBlank()) body.put("sha", sha);
+        HttpResponse<String> response = send(cfg, baseRequest(cfg, uri)
+                .POST(HttpRequest.BodyPublishers.ofString(MiniJson.stringify(body), StandardCharsets.UTF_8))
+                .build());
+        require2xx(response, "GitHub create commit");
+        Object parsed = MiniJson.parse(response.body());
+        if (!(parsed instanceof Map<?, ?> map)) throw new IOException("Bad GitHub create commit response.");
+        Object sha = map.get("sha");
+        if (sha == null || String.valueOf(sha).isBlank()) throw new IOException("GitHub create commit did not return a sha.");
+        return String.valueOf(sha);
+    }
 
-        HttpRequest request = baseRequest(cfg, uri)
-                .PUT(HttpRequest.BodyPublishers.ofString(MiniJson.stringify(body), StandardCharsets.UTF_8))
-                .build();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    private void updateBranchRef(PluginSettings cfg, String newCommitSha) throws IOException, InterruptedException {
+        URI uri = apiUri(cfg, "/git/refs/" + encodePath("heads/" + cfg.githubBranch()));
+        Map<String, Object> body = mapOf(
+                "sha", newCommitSha,
+                "force", false
+        );
+        HttpResponse<String> response = send(cfg, baseRequest(cfg, uri)
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(MiniJson.stringify(body), StandardCharsets.UTF_8))
+                .build());
+        require2xx(response, "GitHub update branch ref");
+    }
+
+    private HttpResponse<String> send(PluginSettings cfg, HttpRequest request) throws IOException, InterruptedException {
+        return client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+    }
+
+    private void require2xx(HttpResponse<String> response, String action) throws IOException {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            plugin.getLogger().warning("GitHub PUT failed for " + repoPath + " with HTTP " + response.statusCode() + ": " + shorten(response.body()));
+            throw new IOException(action + " failed with HTTP " + response.statusCode() + ": " + shorten(response.body()));
         }
-        return response.statusCode();
+    }
+
+    private URI apiUri(PluginSettings cfg, String pathAndQuery) {
+        return URI.create("https://api.github.com/repos/" + encSegment(cfg.githubOwner()) + "/" + encSegment(cfg.githubRepo()) + pathAndQuery);
     }
 
     private HttpRequest.Builder baseRequest(PluginSettings cfg, URI uri) {
@@ -178,7 +209,6 @@ public final class GitHubPublisher {
                 .header("Content-Type", "application/json");
     }
 
-
     private boolean isUuidFileName(String fileNameWithoutExtension) {
         if (fileNameWithoutExtension == null) return false;
         try {
@@ -190,35 +220,42 @@ public final class GitHubPublisher {
     }
 
     private String combinePath(String base, String rel) {
-        String cleanBase = base == null ? "" : base.trim();
-        while (cleanBase.startsWith("/")) cleanBase = cleanBase.substring(1);
-        while (cleanBase.endsWith("/")) cleanBase = cleanBase.substring(0, cleanBase.length() - 1);
+        String cleanBase = trimSlashes(base);
         String cleanRel = rel == null ? "" : rel.trim();
         while (cleanRel.startsWith("/")) cleanRel = cleanRel.substring(1);
-        return cleanBase.isBlank() ? cleanRel : cleanBase + "/" + cleanRel;
+        if (cleanBase.isEmpty()) return cleanRel;
+        if (cleanRel.isEmpty()) return cleanBase;
+        return cleanBase + "/" + cleanRel;
     }
 
-    private String encodePath(String path) {
-        String[] parts = path.split("/");
+    private String trimSlashes(String value) {
+        String out = value == null ? "" : value.trim();
+        while (out.startsWith("/")) out = out.substring(1);
+        while (out.endsWith("/")) out = out.substring(0, out.length() - 1);
+        return out;
+    }
+
+    private String encSegment(String text) {
+        return java.net.URLEncoder.encode(text, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    private String encodePath(String text) {
+        String[] parts = text.split("/", -1);
         StringBuilder out = new StringBuilder();
-        for (String part : parts) {
-            if (out.length() > 0) out.append('/');
-            out.append(enc(part));
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) out.append('/');
+            out.append(encSegment(parts[i]));
         }
         return out.toString();
     }
 
-    private String enc(String value) {
-        return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8).replace("+", "%20");
+    private String shorten(String text) {
+        if (text == null) return "";
+        return text.length() <= 500 ? text : text.substring(0, 500) + "...";
     }
 
     private boolean blank(String value) {
         return value == null || value.isBlank();
-    }
-
-    private String shorten(String value) {
-        if (value == null) return "";
-        return value.length() <= 500 ? value : value.substring(0, 500) + "...";
     }
 
     private Map<String, Object> mapOf(Object... parts) {
@@ -229,15 +266,8 @@ public final class GitHubPublisher {
         return map;
     }
 
-    private record DirectoryFile(String name, String path, String sha, String type) {}
-
-    private record ExistingFile(String sha, String content) {
-        boolean exists() { return sha != null && !sha.isBlank(); }
-        Optional<String> optionalSha() { return Optional.ofNullable(sha); }
-        String contentBase64NoWhitespace() {
-            return content == null ? "" : content.replaceAll("\\s+", "");
-        }
-    }
-
+    private record RefInfo(String commitSha) {}
+    private record CommitInfo(String treeSha) {}
+    private record TreeFile(String path, String type, String sha) {}
     public record PublishResult(boolean success, String message) {}
 }

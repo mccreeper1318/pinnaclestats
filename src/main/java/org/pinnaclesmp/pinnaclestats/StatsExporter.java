@@ -28,7 +28,15 @@ public final class StatsExporter {
         this.settings.set(settings);
     }
 
+    public ExportResult exportLocalOnly() {
+        return export(false);
+    }
+
     public ExportResult exportAndMaybePublish() {
+        return export(true);
+    }
+
+    private ExportResult export(boolean publishToGitHub) {
         PluginSettings cfg = settings.get();
         try {
             Map<String, String> files = buildExportFiles(cfg);
@@ -37,18 +45,21 @@ public final class StatsExporter {
                 writeLocalFiles(cfg, files);
             }
 
-            if (cfg.githubPublishEnabled()) {
+            lastExport = Instant.now();
+
+            if (publishToGitHub && cfg.githubPublishEnabled()) {
                 GitHubPublisher.PublishResult result = gitHubPublisher.publish(cfg, files);
                 lastPublishResult = result.message();
                 if (!result.success()) {
                     lastExportError = result.message();
                     return new ExportResult(false, files.size(), lastExport.toString(), result.message());
                 }
-            } else {
+            } else if (publishToGitHub) {
                 lastPublishResult = "GitHub publishing disabled.";
+            } else {
+                lastPublishResult = "Local export only. GitHub was not published.";
             }
 
-            lastExport = Instant.now();
             lastExportError = "";
             plugin.getLogger().info("Exported " + files.size() + " PinnacleStats JSON file(s). " + lastPublishResult);
             return new ExportResult(true, files.size(), lastExport.toString(), lastPublishResult);

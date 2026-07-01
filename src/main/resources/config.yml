@@ -22,8 +22,7 @@ stats:
   # Exact folder containing <uuid>.json stat files.
   # For your Bisect/Paper setup, this should be world/players/stats.
   folder-path: "world/players/stats"
-  # How often the plugin refreshes, exports, and optionally publishes new website JSON.
-  # 15 minutes is recommended to avoid excessive GitHub commits.
+  # How often the plugin refreshes cached stats. Set to 0 for manual-only updates.
   refresh-interval-minutes: 15
   refresh-on-player-quit: true
   refresh-on-server-stop: true
@@ -38,11 +37,16 @@ privacy:
 export:
   local-enabled: true
   local-folder: "plugins/PinnacleStats/export"
+  # If true, refreshes also update the local export folder.
+  # This no longer publishes to GitHub unless github.publish-after-refresh is also true.
   after-refresh: true
 
 github:
   # Turn this on after you create a GitHub token with Contents read/write access for your website repo.
   enabled: false
+  # Keep false unless you intentionally want scheduled/player-quit refreshes to publish to GitHub.
+  # Manual /pstats publish is recommended.
+  publish-after-refresh: false
   owner: "YOUR_GITHUB_USERNAME_OR_ORG"
   repo: "YOUR_WEBSITE_REPO"
   branch: "main"

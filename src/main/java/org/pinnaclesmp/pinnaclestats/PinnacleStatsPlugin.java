@@ -5,6 +5,7 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 public final class PinnacleStatsPlugin extends JavaPlugin {
     private PluginSettings settings;
@@ -13,6 +14,7 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
     private StatsExporter statsExporter;
     private int refreshTaskId = -1;
     private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+    private final AtomicBoolean exportRunning = new AtomicBoolean(false);
 
     @Override
     public void onEnable() {
@@ -53,7 +55,9 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         if (settings != null && settings.refreshOnServerStop() && statsCache != null) {
             try {
                 statsCache.refreshAll();
-                exportAfterRefreshIfEnabled();
+                if (settings.exportAfterRefresh() && statsExporter != null) {
+                    statsExporter.exportLocalOnly();
+                }
             } catch (Exception ex) {
                 getLogger().warning("Could not refresh stats during shutdown: " + ex.getMessage());
             }
@@ -124,16 +128,40 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         });
     }
 
-    public StatsExporter.ExportResult exportNow() {
+    public boolean exportAsync(boolean publishToGitHub, Consumer<StatsExporter.ExportResult> callback) {
         if (statsExporter == null) {
-            return new StatsExporter.ExportResult(false, 0, "", "Exporter is not initialized.");
+            if (callback != null) {
+                callback.accept(new StatsExporter.ExportResult(false, 0, "", "Exporter is not initialized."));
+            }
+            return false;
         }
-        return statsExporter.exportAndMaybePublish();
+        if (!exportRunning.compareAndSet(false, true)) {
+            if (callback != null) {
+                callback.accept(new StatsExporter.ExportResult(false, 0, statsExporter.lastExport(), "Another PinnacleStats export or publish is already running."));
+            }
+            return false;
+        }
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            StatsExporter.ExportResult result;
+            try {
+                result = publishToGitHub ? statsExporter.exportAndMaybePublish() : statsExporter.exportLocalOnly();
+            } finally {
+                exportRunning.set(false);
+            }
+            if (callback != null && !shuttingDown.get()) {
+                Bukkit.getScheduler().runTask(this, () -> callback.accept(result));
+            }
+        });
+        return true;
     }
 
     private void exportAfterRefreshIfEnabled() {
         if (settings != null && settings.exportAfterRefresh() && statsExporter != null) {
-            statsExporter.exportAndMaybePublish();
+            if (settings.githubPublishAfterRefresh()) {
+                statsExporter.exportAndMaybePublish();
+            } else {
+                statsExporter.exportLocalOnly();
+            }
         }
     }
 

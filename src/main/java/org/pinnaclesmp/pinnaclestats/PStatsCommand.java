@@ -47,13 +47,26 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
                 }
                 return true;
             }
-            case "export", "publish" -> {
-                StatsExporter.ExportResult result = plugin.exportNow();
-                if (result.success()) {
-                    sender.sendMessage("§aPinnacleStats export complete. Files: §f" + result.fileCount() + "§a. " + result.message());
-                } else {
-                    sender.sendMessage("§cPinnacleStats export failed: " + result.message());
-                }
+            case "export" -> {
+                sender.sendMessage("§eStarting PinnacleStats local export in the background. This will not publish to GitHub.");
+                plugin.exportAsync(false, result -> {
+                    if (result.success()) {
+                        sender.sendMessage("§aPinnacleStats local export complete. Files: §f" + result.fileCount() + "§a. " + result.message());
+                    } else {
+                        sender.sendMessage("§cPinnacleStats local export failed: " + result.message());
+                    }
+                });
+                return true;
+            }
+            case "publish" -> {
+                sender.sendMessage("§eStarting PinnacleStats GitHub publish in the background. The publish will be sent as one commit.");
+                plugin.exportAsync(true, result -> {
+                    if (result.success()) {
+                        sender.sendMessage("§aPinnacleStats publish complete. Files: §f" + result.fileCount() + "§a. " + result.message());
+                    } else {
+                        sender.sendMessage("§cPinnacleStats publish failed: " + result.message());
+                    }
+                });
                 return true;
             }
             case "debug" -> {

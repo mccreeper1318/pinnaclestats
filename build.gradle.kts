@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "org.pinnaclesmp"
-version = "1.0.7"
+version = "1.0.8"
 
 java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(25))
