@@ -1,11 +1,11 @@
-# PinnacleStats source v1.0.6
-
-Paper plugin source for PinnacleStats.
-
-Changes in this version:
-- Updates the Gradle Java toolchain to Java 25 for Paper 26.2.
-- Keeps `player-name-overrides` config support.
-- Keeps legacy `players.aliases` support.
-- Skips UUID-named files in the website-facing `players/` export folder.
-- Keeps UUID files in `players-by-uuid/`.
-- Cleans stale UUID-named files from local and GitHub `players/` folders when exporting/publishing.
+**PinnacleStats 1.0.9**  
+PinnacleStats exports Minecraft player statistics into clean static JSON files for the Pinnacle SMP website.  
+**Important 1.0.9 fix**  
+Version 1.0.9 adds retry handling for temporary GitHub failures, including HTTP 503 Unicorn responses from GitHub.   
+**Install**  
+Upload dist/PinnacleStats-1.0.9.jar to your server's plugins/ folder and restart the server.  
+**Manual workflow**  
+/pstats refresh  
+ /pstats publish  
+   
+/pstats export only writes local files. /pstats publish writes local files and updates GitHub.  

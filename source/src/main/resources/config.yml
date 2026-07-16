@@ -1,0 +1,68 @@
+# PinnacleStats configuration
+# Recommended mode for Pinnacle SMP GitHub Pages:
+# - The plugin reads world/players/stats/<uuid>.json by default.
+# - The plugin creates clean JSON files.
+# - Optional GitHub publishing commits those JSON files to your existing website repo.
+# - Your website fetches those JSON files from the same domain, so no proxy or extra service is needed.
+
+api:
+  # Leave this false for the GitHub Pages/static JSON setup.
+  # You may turn it on only for direct testing from a browser using http://SERVER_IP:1042/api/health.
+  enabled: false
+  host: "0.0.0.0"
+  port: 1042
+  allowed-origins:
+    - "https://www.pinnaclesmp.org"
+    - "https://pinnaclesmp.org"
+  cache-seconds: 60
+
+stats:
+  # Main world folder name kept for compatibility.
+  world-name: "world"
+  # Exact folder containing <uuid>.json stat files.
+  # For your Bisect/Paper setup, this should be world/players/stats.
+  folder-path: "world/players/stats"
+  # How often the plugin refreshes cached stats. Set to 0 for manual-only updates.
+  refresh-interval-minutes: 15
+  refresh-on-player-quit: true
+  refresh-on-server-stop: true
+  max-top-blocks: 5
+  max-top-mobs: 5
+  max-top-items: 5
+
+privacy:
+  include-deaths: true
+  include-player-kills: true
+
+export:
+  local-enabled: true
+  local-folder: "plugins/PinnacleStats/export"
+  # If true, refreshes also update the local export folder.
+  # This no longer publishes to GitHub unless github.publish-after-refresh is also true.
+  after-refresh: true
+
+github:
+  # Turn this on after you create a GitHub token with Contents read/write access for your website repo.
+  enabled: false
+  # Keep false unless you intentionally want scheduled/player-quit refreshes to publish to GitHub.
+  # Manual /pstats publish is recommended.
+  publish-after-refresh: false
+  owner: "YOUR_GITHUB_USERNAME_OR_ORG"
+  repo: "YOUR_WEBSITE_REPO"
+  branch: "main"
+  base-path: "assets/player-stats"
+  token: "PASTE_TOKEN_HERE"
+  commit-message: "Update PinnacleStats player data"
+  committer-name: "PinnacleStats"
+  committer-email: "pinnaclestats@users.noreply.github.com"
+
+# Optional overrides if usercache.json cannot resolve a UUID to the Minecraft username you use on the website.
+# The name outside parentheses on your site is the Minecraft username. Use that here if an override is needed.
+# Format:
+# player-name-overrides:
+#   "00000000-0000-0000-0000-000000000000": "McCreeper1318"
+player-name-overrides: {}
+
+players:
+  # Legacy alias location from earlier builds. You can leave this empty.
+  aliases: {}
