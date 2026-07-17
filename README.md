@@ -1,16 +1,18 @@
-## PinnacleStats 1.0.9
-PinnacleStats exports Minecraft player statistics into clean static JSON files for the Pinnacle SMP website.  
+# PinnacleStats v1.0.10
 
-### Important 1.0.9 fix 
-Version 1.0.9 adds retry handling for temporary GitHub failures, including HTTP 503 Unicorn responses from GitHub.   
+PinnacleStats exports formatted Minecraft player statistics for the Pinnacle SMP website.
 
-### Install
-Upload dist/PinnacleStats-1.0.9.jar to your server's plugins/ folder and restart the server.  
+## This update
 
-### Manual workflow
-1. `/pstats refresh` 
-2. `/pstats publish`
+v1.0.10 fixes a startup error on newer Paper 26.2 builds where event listener registration was compiled against the wrong method signature.
 
-### Additional Information
-- /pstats export only writes local files.
-- /pstats publish writes local files and updates GitHub.
+## Install
+
+1. Stop the server.
+2. Delete the old PinnacleStats jar from `plugins/`.
+3. Upload `dist/PinnacleStats-1.0.10.jar` to `plugins/`.
+4. Keep your existing `plugins/PinnacleStats/config.yml`.
+5. Start the server.
+6. Run `/pstats status`.
+
+No website or config changes are required from v1.0.9.

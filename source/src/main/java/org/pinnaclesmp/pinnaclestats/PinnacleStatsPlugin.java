@@ -2,6 +2,7 @@ package org.pinnaclesmp.pinnaclestats;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -32,7 +33,7 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
             command.setTabCompleter(executor);
         }
 
-        Bukkit.getPluginManager().registerEvents(new PlayerStatListener(this), this);
+        Bukkit.getPluginManager().registerEvents(new PlayerStatListener(this), (Plugin) this);
 
         if (settings.apiEnabled()) {
             apiServer.start();
