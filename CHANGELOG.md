@@ -14,6 +14,9 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 - Consolidated the repository into one authoritative root Gradle project and production source tree, preserving the 1.0.9 GitHub retry handling and the 1.0.10 Paper listener-registration fix ([#1](https://github.com/mccreeper1318/PinnacleStats/issues/1)).
 - Updated the project and packaged plugin version to 1.0.11.
+- Replaced server-specific package metadata, URLs, comments, and configuration examples with neutral distribution defaults.
+- Changed the Java package namespace to `io.github.mccreeper1318.pinnaclestats`.
+- Reworked the README into a server-owner guide covering installation, configuration, commands, exports, the optional API, and GitHub publishing.
 
 ### Added
 

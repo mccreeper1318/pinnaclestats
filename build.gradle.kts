@@ -2,7 +2,7 @@ plugins {
     java
 }
 
-group = "org.pinnaclesmp"
+group = "io.github.mccreeper1318"
 version = "1.0.11"
 
 java {

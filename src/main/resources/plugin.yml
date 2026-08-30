@@ -1,9 +1,9 @@
 name: PinnacleStats
 version: ${version}
-main: org.pinnaclesmp.pinnaclestats.PinnacleStatsPlugin
+main: io.github.mccreeper1318.pinnaclestats.PinnacleStatsPlugin
 api-version: '1.21'
-author: Pinnacle SMP
-description: Exports formatted Minecraft player statistics for Pinnacle SMP member profiles.
+author: mccreeper1318
+description: Exports formatted Minecraft player statistics for websites, dashboards, and integrations.
 commands:
   pstats:
     description: Manage PinnacleStats cache, local exports, GitHub publishing, and optional API.

@@ -1,4 +1,4 @@
-package org.pinnaclesmp.pinnaclestats;
+package io.github.mccreeper1318.pinnaclestats;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;

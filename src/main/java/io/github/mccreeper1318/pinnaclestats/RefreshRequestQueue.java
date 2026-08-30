@@ -1,4 +1,4 @@
-package org.pinnaclesmp.pinnaclestats;
+package io.github.mccreeper1318.pinnaclestats;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

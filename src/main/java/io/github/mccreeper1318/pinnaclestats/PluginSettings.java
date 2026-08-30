@@ -1,4 +1,4 @@
-package org.pinnaclesmp.pinnaclestats;
+package io.github.mccreeper1318.pinnaclestats;
 
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -46,10 +46,6 @@ public record PluginSettings(
         loadStringMap(config.getConfigurationSection("player-name-overrides"), aliases);
 
         List<String> origins = new ArrayList<>(config.getStringList("api.allowed-origins"));
-        if (origins.isEmpty()) {
-            origins.add("https://www.pinnaclesmp.org");
-            origins.add("https://pinnaclesmp.org");
-        }
 
         return new PluginSettings(
                 config.getBoolean("api.enabled", false),

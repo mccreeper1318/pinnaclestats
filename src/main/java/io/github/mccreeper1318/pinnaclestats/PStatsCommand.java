@@ -1,4 +1,4 @@
-package org.pinnaclesmp.pinnaclestats;
+package io.github.mccreeper1318.pinnaclestats;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
