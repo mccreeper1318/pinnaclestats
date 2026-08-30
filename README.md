@@ -2,6 +2,8 @@
 
 PinnacleStats is a Paper plugin that reads Minecraft's saved player statistics and turns them into structured JSON for websites, dashboards, and other integrations.
 
+New to Minecraft plugins or website setup? Follow the [complete step-by-step setup guide](stepbystepguide.md). It covers installation, GitHub Pages, other static website hosts, and the optional live API.
+
 It can:
 
 - Cache statistics for every player with a saved statistics file.

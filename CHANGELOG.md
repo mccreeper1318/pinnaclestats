@@ -23,6 +23,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Added automated Java 25 build and test checks for every pushed branch and pull request.
 - Added automatic release builds that attach the versioned plugin JAR and a SHA-256 checksum when a GitHub release is published.
 - Added unit coverage for refresh-request coalescing and worker scheduling.
+- Added a beginner-friendly step-by-step guide for installation, GitHub Pages, externally hosted static sites, and the optional HTTP API.
 
 ## [1.0.10] - 2026-07-17
 
