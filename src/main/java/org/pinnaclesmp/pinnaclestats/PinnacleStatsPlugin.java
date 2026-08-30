@@ -2,9 +2,11 @@ package org.pinnaclesmp.pinnaclestats;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.PluginCommand;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 public final class PinnacleStatsPlugin extends JavaPlugin {
@@ -15,9 +17,13 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
     private int refreshTaskId = -1;
     private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
     private final AtomicBoolean exportRunning = new AtomicBoolean(false);
+    private final ReentrantLock operationLock = new ReentrantLock(true);
+    private final RefreshRequestQueue refreshRequests = new RefreshRequestQueue();
 
     @Override
     public void onEnable() {
+        shuttingDown.set(false);
+        refreshRequests.reset();
         saveDefaultConfig();
         reloadPluginSettings();
 
@@ -32,7 +38,7 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
             command.setTabCompleter(executor);
         }
 
-        Bukkit.getPluginManager().registerEvents(new PlayerStatListener(this), this);
+        Bukkit.getPluginManager().registerEvents(new PlayerStatListener(this), (Plugin) this);
 
         if (settings.apiEnabled()) {
             apiServer.start();
@@ -48,20 +54,28 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         shuttingDown.set(true);
+        refreshRequests.reset();
         if (refreshTaskId != -1) {
             Bukkit.getScheduler().cancelTask(refreshTaskId);
             refreshTaskId = -1;
         }
-        if (settings != null && settings.refreshOnServerStop() && statsCache != null) {
-            try {
-                statsCache.refreshAll();
-                if (settings.exportAfterRefresh() && statsExporter != null) {
-                    statsExporter.exportLocalOnly();
+
+        operationLock.lock();
+        try {
+            if (settings != null && settings.refreshOnServerStop() && statsCache != null) {
+                try {
+                    statsCache.refreshAll();
+                    if (settings.exportAfterRefresh() && statsExporter != null) {
+                        statsExporter.exportLocalOnly();
+                    }
+                } catch (Exception ex) {
+                    getLogger().warning("Could not refresh stats during shutdown: " + ex.getMessage());
                 }
-            } catch (Exception ex) {
-                getLogger().warning("Could not refresh stats during shutdown: " + ex.getMessage());
             }
+        } finally {
+            operationLock.unlock();
         }
+
         if (apiServer != null) {
             apiServer.stop();
         }
@@ -105,27 +119,21 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
 
     public void refreshAsync() {
         if (shuttingDown.get()) return;
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            try {
-                statsCache.refreshAll();
-                exportAfterRefreshIfEnabled();
-            } catch (Exception ex) {
-                getLogger().warning("Could not refresh player stats: " + ex.getMessage());
-                ex.printStackTrace();
-            }
-        });
+        if (refreshRequests.requestAll()) {
+            scheduleRefreshWorker();
+        }
     }
 
     public void refreshOneAsync(String player) {
         if (shuttingDown.get()) return;
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-            try {
-                statsCache.refreshOne(player);
-                exportAfterRefreshIfEnabled();
-            } catch (Exception ex) {
-                getLogger().warning("Could not refresh stats for " + player + ": " + ex.getMessage());
-            }
-        });
+        if (refreshRequests.requestOne(player)) {
+            scheduleRefreshWorker();
+        }
+    }
+
+    public void refreshOneAfterQuit(String player) {
+        if (shuttingDown.get()) return;
+        Bukkit.getScheduler().runTask(this, () -> refreshOneAsync(player));
     }
 
     public boolean exportAsync(boolean publishToGitHub, Consumer<StatsExporter.ExportResult> callback) {
@@ -143,16 +151,80 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         }
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             StatsExporter.ExportResult result;
+            operationLock.lock();
             try {
-                result = publishToGitHub ? statsExporter.exportAndMaybePublish() : statsExporter.exportLocalOnly();
+                if (shuttingDown.get()) {
+                    result = new StatsExporter.ExportResult(false, 0, statsExporter.lastExport(), "PinnacleStats is shutting down.");
+                } else {
+                    result = publishToGitHub ? statsExporter.exportAndMaybePublish() : statsExporter.exportLocalOnly();
+                }
+            } catch (Exception ex) {
+                result = new StatsExporter.ExportResult(false, 0, statsExporter.lastExport(), ex.getMessage());
             } finally {
+                operationLock.unlock();
                 exportRunning.set(false);
             }
             if (callback != null && !shuttingDown.get()) {
-                Bukkit.getScheduler().runTask(this, () -> callback.accept(result));
+                StatsExporter.ExportResult completedResult = result;
+                Bukkit.getScheduler().runTask(this, () -> callback.accept(completedResult));
             }
         });
         return true;
+    }
+
+    private void scheduleRefreshWorker() {
+        try {
+            Bukkit.getScheduler().runTaskAsynchronously(this, this::runRefreshWorker);
+        } catch (RuntimeException ex) {
+            refreshRequests.reset();
+            if (!shuttingDown.get()) {
+                getLogger().warning("Could not schedule stats refresh: " + ex.getMessage());
+            }
+        }
+    }
+
+    private void runRefreshWorker() {
+        operationLock.lock();
+        try {
+            if (shuttingDown.get()) return;
+
+            boolean refreshed = false;
+            while (!shuttingDown.get()) {
+                RefreshRequestQueue.Batch batch = refreshRequests.takeNext();
+                if (batch.isEmpty()) break;
+                refreshed |= processRefreshBatch(batch);
+            }
+
+            if (refreshed && !shuttingDown.get()) {
+                exportAfterRefreshIfEnabled();
+            }
+        } finally {
+            operationLock.unlock();
+        }
+    }
+
+    private boolean processRefreshBatch(RefreshRequestQueue.Batch batch) {
+        if (batch.fullRefresh()) {
+            try {
+                statsCache.refreshAll();
+                return true;
+            } catch (Exception ex) {
+                getLogger().warning("Could not refresh player stats: " + ex.getMessage());
+                ex.printStackTrace();
+                return false;
+            }
+        }
+
+        boolean refreshed = false;
+        for (String player : batch.players()) {
+            try {
+                statsCache.refreshOne(player);
+                refreshed = true;
+            } catch (Exception ex) {
+                getLogger().warning("Could not refresh stats for " + player + ": " + ex.getMessage());
+            }
+        }
+        return refreshed;
     }
 
     private void exportAfterRefreshIfEnabled() {
@@ -177,14 +249,7 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         }
         long ticks = minutes * 60L * 20L;
         refreshTaskId = Bukkit.getScheduler()
-                .runTaskTimerAsynchronously(this, () -> {
-                    try {
-                        statsCache.refreshAll();
-                        exportAfterRefreshIfEnabled();
-                    } catch (Exception ex) {
-                        getLogger().warning("Scheduled stats refresh failed: " + ex.getMessage());
-                    }
-                }, ticks, ticks)
+                .runTaskTimer(this, this::refreshAsync, ticks, ticks)
                 .getTaskId();
         getLogger().info("Scheduled stats refresh every " + minutes + " minute(s).");
     }

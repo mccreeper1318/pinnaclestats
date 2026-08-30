@@ -186,11 +186,71 @@ public final class GitHubPublisher {
     }
 
     private HttpResponse<String> send(PluginSettings cfg, HttpRequest request) throws IOException, InterruptedException {
-        return client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        int maxAttempts = 4;
+        HttpResponse<String> lastResponse = null;
+        IOException lastException = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                lastResponse = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                if (!isRetryableStatus(lastResponse.statusCode()) || attempt == maxAttempts) {
+                    return lastResponse;
+                }
+
+                long delay = retryDelayMillis(lastResponse, attempt);
+                plugin.getLogger().warning("GitHub returned HTTP " + lastResponse.statusCode()
+                        + " while publishing stats. Retrying in " + (delay / 1000.0)
+                        + "s (attempt " + attempt + "/" + maxAttempts + ").");
+                Thread.sleep(delay);
+            } catch (IOException ex) {
+                lastException = ex;
+                if (attempt == maxAttempts) {
+                    throw ex;
+                }
+                long delay = defaultRetryDelayMillis(attempt);
+                plugin.getLogger().warning("GitHub request failed while publishing stats: " + ex.getMessage()
+                        + ". Retrying in " + (delay / 1000.0)
+                        + "s (attempt " + attempt + "/" + maxAttempts + ").");
+                Thread.sleep(delay);
+            }
+        }
+
+        if (lastException != null) throw lastException;
+        return lastResponse;
+    }
+
+    private boolean isRetryableStatus(int statusCode) {
+        return statusCode == 429 || statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504;
+    }
+
+    private long retryDelayMillis(HttpResponse<String> response, int attempt) {
+        Optional<String> retryAfter = response.headers().firstValue("Retry-After");
+        if (retryAfter.isPresent()) {
+            try {
+                long seconds = Long.parseLong(retryAfter.get().trim());
+                if (seconds > 0) return Math.min(seconds * 1000L, 30000L);
+            } catch (NumberFormatException ignored) {
+                // Fall back to exponential delay below.
+            }
+        }
+        return defaultRetryDelayMillis(attempt);
+    }
+
+    private long defaultRetryDelayMillis(int attempt) {
+        return switch (attempt) {
+            case 1 -> 3000L;
+            case 2 -> 7000L;
+            default -> 15000L;
+        };
     }
 
     private void require2xx(HttpResponse<String> response, String action) throws IOException {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            if (isRetryableStatus(response.statusCode())) {
+                throw new IOException(action + " failed with HTTP " + response.statusCode()
+                        + ". GitHub may be temporarily unavailable or overloaded. Try /pstats publish again in a few minutes. Response: "
+                        + shorten(response.body()));
+            }
             throw new IOException(action + " failed with HTTP " + response.statusCode() + ": " + shorten(response.body()));
         }
     }

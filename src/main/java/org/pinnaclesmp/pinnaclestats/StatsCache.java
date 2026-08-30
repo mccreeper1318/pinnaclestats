@@ -6,15 +6,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public final class StatsCache {
     private final PinnacleStatsPlugin plugin;
     private final AtomicReference<PluginSettings> settings;
-    private final Map<String, StatsProfile> byName = new ConcurrentHashMap<>();
-    private final Map<UUID, StatsProfile> byUuid = new ConcurrentHashMap<>();
+    private final AtomicReference<CacheSnapshot> cache = new AtomicReference<>(CacheSnapshot.empty());
     private volatile Instant lastRefresh = Instant.EPOCH;
     private volatile String lastError = "";
 
@@ -61,10 +59,7 @@ public final class StatsCache {
             }
         }
 
-        byName.clear();
-        byName.putAll(newByName);
-        byUuid.clear();
-        byUuid.putAll(newByUuid);
+        cache.set(CacheSnapshot.of(newByName, newByUuid));
         lastRefresh = Instant.now();
         lastError = "";
         plugin.getLogger().info("Loaded stats for " + loaded + " player(s).");
@@ -105,26 +100,34 @@ public final class StatsCache {
     }
 
     private void putProfile(StatsProfile profile) {
-        byUuid.put(profile.uuid(), profile);
-        byName.put(normalize(profile.name()), profile);
+        cache.updateAndGet(current -> {
+            Map<String, StatsProfile> newByName = new HashMap<>(current.byName());
+            Map<UUID, StatsProfile> newByUuid = new HashMap<>(current.byUuid());
+            newByUuid.put(profile.uuid(), profile);
+            newByName.put(normalize(profile.name()), profile);
+            return CacheSnapshot.of(newByName, newByUuid);
+        });
         lastRefresh = Instant.now();
     }
 
     public Optional<StatsProfile> findByName(String name) {
-        return Optional.ofNullable(byName.get(normalize(name)));
+        CacheSnapshot current = cache.get();
+        return Optional.ofNullable(current.byName().get(normalize(name)));
     }
 
     public Optional<StatsProfile> findByUuid(UUID uuid) {
-        return Optional.ofNullable(byUuid.get(uuid));
+        CacheSnapshot current = cache.get();
+        return Optional.ofNullable(current.byUuid().get(uuid));
     }
 
     public List<StatsProfile> allProfiles() {
-        return byName.values().stream()
+        CacheSnapshot current = cache.get();
+        return current.byName().values().stream()
                 .sorted(Comparator.comparing(StatsProfile::name, String.CASE_INSENSITIVE_ORDER))
                 .collect(Collectors.toList());
     }
 
-    public int size() { return byUuid.size(); }
+    public int size() { return cache.get().byUuid().size(); }
     public Instant lastRefresh() { return lastRefresh; }
     public String lastError() { return lastError; }
 
@@ -220,7 +223,7 @@ public final class StatsCache {
         if (alias != null && !alias.isBlank()) return alias;
         String cached = userCacheNames.get(uuid);
         if (cached != null && !cached.isBlank()) return cached;
-        StatsProfile existing = byUuid.get(uuid);
+        StatsProfile existing = cache.get().byUuid().get(uuid);
         if (existing != null && existing.name() != null && !existing.name().isBlank()) return existing.name();
         return uuid.toString();
     }
@@ -434,6 +437,16 @@ public final class StatsCache {
 
     private UUID tryUuid(String text) {
         try { return UUID.fromString(text); } catch (Exception ignored) { return null; }
+    }
+
+    private record CacheSnapshot(Map<String, StatsProfile> byName, Map<UUID, StatsProfile> byUuid) {
+        private static CacheSnapshot empty() {
+            return new CacheSnapshot(Map.of(), Map.of());
+        }
+
+        private static CacheSnapshot of(Map<String, StatsProfile> byName, Map<UUID, StatsProfile> byUuid) {
+            return new CacheSnapshot(Map.copyOf(byName), Map.copyOf(byUuid));
+        }
     }
 
     private Map<String, Object> mapOf(Object... parts) {

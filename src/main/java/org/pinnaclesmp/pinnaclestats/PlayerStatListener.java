@@ -14,7 +14,8 @@ public final class PlayerStatListener implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         if (plugin.settings().refreshOnPlayerQuit()) {
-            plugin.refreshOneAsync(event.getPlayer().getName());
+            String playerName = event.getPlayer().getName();
+            plugin.refreshOneAfterQuit(playerName);
         }
     }
 }
