@@ -30,15 +30,15 @@ final class RefreshRequestQueue {
     public synchronized Batch takeNext() {
         if (fullRefreshPending) {
             fullRefreshPending = false;
-            return Batch.fullRefresh();
+            return Batch.forFullRefresh();
         }
         if (!pendingPlayers.isEmpty()) {
             List<String> players = new ArrayList<>(pendingPlayers.values());
             pendingPlayers.clear();
-            return Batch.players(players);
+            return Batch.forPlayers(players);
         }
         workerScheduled = false;
-        return Batch.empty();
+        return Batch.none();
     }
 
     public synchronized void reset() {
@@ -54,15 +54,15 @@ final class RefreshRequestQueue {
     }
 
     record Batch(boolean fullRefresh, List<String> players) {
-        private static Batch fullRefresh() {
+        private static Batch forFullRefresh() {
             return new Batch(true, List.of());
         }
 
-        private static Batch players(List<String> players) {
+        private static Batch forPlayers(List<String> players) {
             return new Batch(false, List.copyOf(players));
         }
 
-        private static Batch empty() {
+        private static Batch none() {
             return new Batch(false, List.of());
         }
 
