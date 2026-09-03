@@ -2,6 +2,16 @@
 
 All notable PinnacleStats changes are documented here. Historical entries are based on the published GitHub release notes and repository release history.
 
+## 1.0.13 - Unreleased
+
+### Fixed
+
+- Preserved each player's last-known-good cached profile when that player's statistics file temporarily fails to read or parse during a full refresh, while still updating successfully parsed profiles and reporting the failed-file count through status and logs.
+
+### Changed
+
+- Updated the project and packaged plugin version to 1.0.13.
+
 ## [1.0.11] - 2026-08-30
 
 ### Fixed
