@@ -2,11 +2,11 @@
 
 All notable PinnacleStats changes are documented here. Historical entries are based on the published GitHub release notes and repository release history.
 
-## [1.0.13] - Unreleased
+## 1.0.13 - Unreleased
 
 ### Fixed
 
-- Preserved each player's last-known-good cached profile when that player's statistics file temporarily fails to read or parse during a full refresh, while still updating successfully parsed profiles and reporting the failed-file count through status and logs ([#5](https://github.com/mccreeper1318/PinnacleStats/issues/5)).
+- Preserved each player's last-known-good cached profile when that player's statistics file temporarily fails to read or parse during a full refresh, while still updating successfully parsed profiles and reporting the failed-file count through status and logs.
 
 ### Changed
 
