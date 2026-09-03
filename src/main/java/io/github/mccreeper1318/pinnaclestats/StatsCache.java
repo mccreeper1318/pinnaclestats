@@ -38,31 +38,54 @@ public final class StatsCache {
         File[] files = statsFolder.listFiles((dir, name) -> name.endsWith(".json"));
         if (files == null) {
             lastError = "Could not list stats files in " + statsFolder.getAbsolutePath();
+            plugin.getLogger().warning(lastError);
             return;
         }
 
+        CacheSnapshot previous = cache.get();
         Map<String, StatsProfile> newByName = new HashMap<>();
         Map<UUID, StatsProfile> newByUuid = new HashMap<>();
         int loaded = 0;
+        int failed = 0;
+        int retained = 0;
 
         for (File file : files) {
+            UUID uuid;
             try {
-                UUID uuid = UUID.fromString(file.getName().replace(".json", ""));
+                uuid = UUID.fromString(file.getName().replace(".json", ""));
+            } catch (IllegalArgumentException ignored) {
+                // Not a UUID stats file. Ignore it.
+                continue;
+            }
+
+            try {
                 StatsProfile profile = parseProfile(file, uuid, cfg, userCacheNames);
                 newByUuid.put(uuid, profile);
                 newByName.put(normalize(profile.name()), profile);
                 loaded++;
-            } catch (IllegalArgumentException ignored) {
-                // Not a UUID stats file. Ignore it.
             } catch (Exception ex) {
+                failed++;
+                StatsProfile previousProfile = previous.byUuid().get(uuid);
+                if (previousProfile != null) {
+                    newByUuid.put(uuid, previousProfile);
+                    newByName.put(normalize(previousProfile.name()), previousProfile);
+                    retained++;
+                }
                 plugin.getLogger().warning("Could not parse stats file " + file.getName() + ": " + ex.getMessage());
             }
         }
 
         cache.set(CacheSnapshot.of(newByName, newByUuid));
         lastRefresh = Instant.now();
-        lastError = "";
-        plugin.getLogger().info("Loaded stats for " + loaded + " player(s).");
+        if (failed > 0) {
+            lastError = "Partial stats refresh: " + failed + " file(s) failed to load; retained last-known-good profiles for "
+                    + retained + " player(s).";
+            plugin.getLogger().warning(lastError);
+        } else {
+            lastError = "";
+        }
+        plugin.getLogger().info("Loaded stats for " + loaded + " player(s)." +
+                (retained > 0 ? " Retained " + retained + " last-known-good profile(s)." : ""));
     }
 
     public void refreshOne(String identifier) {
