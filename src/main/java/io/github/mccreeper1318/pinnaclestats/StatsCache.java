@@ -126,6 +126,7 @@ public final class StatsCache {
         cache.updateAndGet(current -> {
             Map<String, StatsProfile> newByName = new HashMap<>(current.byName());
             Map<UUID, StatsProfile> newByUuid = new HashMap<>(current.byUuid());
+            newByName.entrySet().removeIf(entry -> profile.uuid().equals(entry.getValue().uuid()));
             newByUuid.put(profile.uuid(), profile);
             newByName.put(normalize(profile.name()), profile);
             return CacheSnapshot.of(newByName, newByUuid);
