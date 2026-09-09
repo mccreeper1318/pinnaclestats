@@ -8,6 +8,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 - Preserved each player's last-known-good cached profile when that player's statistics file temporarily fails to read or parse during a full refresh, while still updating successfully parsed profiles and reporting the failed-file count through status and logs.
 - Removed obsolete cached name mappings during single-player refreshes so username or configured override changes immediately replace the old identity without duplicating the same UUID in lookups or exports ([#6](https://github.com/mccreeper1318/PinnacleStats/issues/6)).
+- Persisted resolved UUID-to-name mappings in the plugin data folder so historical players retain username-based lookups and exports across server restarts, while configured overrides and current `usercache.json` names continue to take precedence ([#7](https://github.com/mccreeper1318/PinnacleStats/issues/7)).
 
 ### Changed
 
