@@ -12,6 +12,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Wrote local export JSON through same-directory temporary files and atomic replacement where supported, preserving previous live files on failed writes, cleaning temporary files, and publishing `index.json` only after player files are ready ([#8](https://github.com/mccreeper1318/PinnacleStats/issues/8)).
 - Retried the complete GitHub publishing transaction when a concurrent branch update causes a ref conflict, rebuilding from the latest branch head without force-pushing and returning a bounded failure if the branch keeps changing ([#9](https://github.com/mccreeper1318/PinnacleStats/issues/9)).
 - Recognized GitHub rate-limited `403` responses without retrying authentication or permission failures, honored `Retry-After` first and `X-RateLimit-Reset` for primary limits, and kept retry counts and delays bounded ([#10](https://github.com/mccreeper1318/PinnacleStats/issues/10)).
+- Published reloaded settings safely and captured one immutable configuration snapshot per refresh, export, publish, and shutdown operation so in-flight work cannot mix configuration generations while subsequently started work sees the reload ([#11](https://github.com/mccreeper1318/PinnacleStats/issues/11)).
 
 ### Changed
 
