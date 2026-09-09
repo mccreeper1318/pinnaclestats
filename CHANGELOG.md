@@ -13,6 +13,14 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 - Updated the project and packaged plugin version to 1.0.13.
 
+### Dependencies
+
+- Updated `actions/checkout` from `5` to `7`
+- Updated `actions/upload-artifact` from `4` to `7`
+- Updated `gradle/actions` from `4` to `6`
+- Updated `gradle-wrapper` from `9.3.0` to `9.7.1`
+- Updated `org.junit:junit-bom` from `5.13.4` to `6.1.3`
+
 ## [1.0.11] - 2026-08-30
 
 ### Fixed
