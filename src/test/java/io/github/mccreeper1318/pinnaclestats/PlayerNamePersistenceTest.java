@@ -5,11 +5,14 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlayerNamePersistenceTest {
@@ -63,6 +66,53 @@ class PlayerNamePersistenceTest {
         assertEquals("ConfiguredName", cache.findByUuid(uuid).orElseThrow().name());
         assertEquals(uuid, cache.findByName("ConfiguredName").orElseThrow().uuid());
         assertTrue(cache.findByName("PersistedName").isEmpty());
+    }
+
+    @Test
+    void rememberRetriesSameNameAfterFailedWrite(@TempDir Path tempDir) throws Exception {
+        UUID uuid = UUID.randomUUID();
+        Path blockedParent = tempDir.resolve("blocked");
+        Files.writeString(blockedParent, "not a directory");
+        Path nameCacheFile = blockedParent.resolve("player-names.json");
+        List<String> warnings = new ArrayList<>();
+
+        PlayerNameStore store = new PlayerNameStore(nameCacheFile, warnings::add);
+        store.remember(uuid, "RetryPlayer");
+
+        assertFalse(warnings.isEmpty());
+        assertFalse(Files.isRegularFile(nameCacheFile));
+
+        Files.delete(blockedParent);
+        Files.createDirectory(blockedParent);
+        store.remember(uuid, "RetryPlayer");
+
+        assertTrue(Files.isRegularFile(nameCacheFile));
+        PlayerNameStore restarted = new PlayerNameStore(nameCacheFile, message -> { throw new AssertionError(message); });
+        assertEquals("RetryPlayer", restarted.snapshot().get(uuid));
+    }
+
+    @Test
+    void rememberAllRetriesUnchangedProfilesAfterFailedWrite(@TempDir Path tempDir) throws Exception {
+        UUID uuid = UUID.randomUUID();
+        Path blockedParent = tempDir.resolve("blocked-batch");
+        Files.writeString(blockedParent, "not a directory");
+        Path nameCacheFile = blockedParent.resolve("player-names.json");
+        List<String> warnings = new ArrayList<>();
+        StatsProfile profile = new StatsProfile(uuid, "BatchPlayer", Instant.now(), Map.of());
+
+        PlayerNameStore store = new PlayerNameStore(nameCacheFile, warnings::add);
+        store.rememberAll(List.of(profile));
+
+        assertFalse(warnings.isEmpty());
+        assertFalse(Files.isRegularFile(nameCacheFile));
+
+        Files.delete(blockedParent);
+        Files.createDirectory(blockedParent);
+        store.rememberAll(List.of(profile));
+
+        assertTrue(Files.isRegularFile(nameCacheFile));
+        PlayerNameStore restarted = new PlayerNameStore(nameCacheFile, message -> { throw new AssertionError(message); });
+        assertEquals("BatchPlayer", restarted.snapshot().get(uuid));
     }
 
     private PluginSettings settings(Path statsFolder, Map<String, String> aliases) {
