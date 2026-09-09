@@ -39,6 +39,25 @@ jobs:
       - name: Verify plugin artifact
         run: bash scripts/verify-build-artifact.sh
 
+      - name: Verify reproducible JAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          first_jar="$(find build/libs -maxdepth 1 -type f -name 'PinnacleStats-*.jar' ! -name '*-plain.jar' -print -quit)"
+          reference_jar="$RUNNER_TEMP/PinnacleStats-reference.jar"
+          cp "$first_jar" "$reference_jar"
+
+          ./gradlew clean jar --no-daemon
+
+          rebuilt_jar="$(find build/libs -maxdepth 1 -type f -name 'PinnacleStats-*.jar' ! -name '*-plain.jar' -print -quit)"
+          if ! cmp -s "$reference_jar" "$rebuilt_jar"; then
+            echo "PinnacleStats JAR is not byte-for-byte reproducible from the same clean checkout." >&2
+            sha256sum "$reference_jar" "$rebuilt_jar" >&2
+            exit 1
+          fi
+
+          echo "Verified byte-for-byte reproducible JAR."
+
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v7
         with:
