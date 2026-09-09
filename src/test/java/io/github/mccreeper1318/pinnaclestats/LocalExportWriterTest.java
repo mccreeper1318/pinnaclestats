@@ -7,16 +7,20 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class LocalExportWriterTest {
     @Test
@@ -96,5 +100,39 @@ class LocalExportWriterTest {
         try (var stream = Files.walk(base)) {
             assertTrue(stream.noneMatch(path -> path.getFileName().toString().endsWith(".tmp")));
         }
+    }
+
+    @Test
+    void replacementPreservesExistingPosixPermissions(@TempDir Path tempDir) throws Exception {
+        assumeTrue(Files.getFileStore(tempDir).supportsFileAttributeView("posix"));
+
+        Path target = tempDir.resolve("existing.json");
+        Files.writeString(target, "old\n");
+        Set<PosixFilePermission> expected = EnumSet.of(
+                PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.GROUP_READ
+        );
+        Files.setPosixFilePermissions(target, expected);
+
+        new AtomicFileWriter().write(target, "new\n");
+
+        assertEquals("new\n", Files.readString(target));
+        assertEquals(expected, Files.getPosixFilePermissions(target));
+    }
+
+    @Test
+    void newPosixExportIsReadableByGroupAndOthers(@TempDir Path tempDir) throws Exception {
+        assumeTrue(Files.getFileStore(tempDir).supportsFileAttributeView("posix"));
+
+        Path target = tempDir.resolve("new.json");
+        new AtomicFileWriter().write(target, "new\n");
+
+        assertEquals(EnumSet.of(
+                PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.GROUP_READ,
+                PosixFilePermission.OTHERS_READ
+        ), Files.getPosixFilePermissions(target));
     }
 }
