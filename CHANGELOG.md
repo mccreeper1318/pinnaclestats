@@ -2,7 +2,7 @@
 
 All notable PinnacleStats changes are documented here. Historical entries are based on the published GitHub release notes and repository release history.
 
-## 1.0.13 - Unreleased
+## 1.0.13 - 2026-09-09
 
 ### Fixed
 
