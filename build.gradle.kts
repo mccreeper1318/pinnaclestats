@@ -10,12 +10,14 @@ java {
 }
 
 dependencies {
-    // Paper 26.1+ uses the new build-based version format.
-    // The old 26.2-R0.1-SNAPSHOT coordinate does not exist.
-    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.121-stable")
     testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(25)
 }
 
 tasks.processResources {
@@ -26,6 +28,8 @@ tasks.processResources {
 
 tasks.jar {
     archiveBaseName.set("PinnacleStats")
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
 }
 
 tasks.test {
