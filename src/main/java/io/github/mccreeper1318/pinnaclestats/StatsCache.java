@@ -36,19 +36,23 @@ public final class StatsCache {
     }
 
     public void refreshAll() {
-        PluginSettings cfg = settings.get();
+        refreshAll(settings.get());
+    }
+
+    void refreshAll(PluginSettings settingsSnapshot) {
+        PluginSettings cfg = Objects.requireNonNull(settingsSnapshot, "settingsSnapshot");
         File statsFolder = statsFolder(cfg);
         Map<UUID, String> userCacheNames = loadUserCacheNames();
         if (!statsFolder.isDirectory()) {
             lastError = "Stats folder not found: " + statsFolder.getAbsolutePath();
-            plugin.getLogger().warning(lastError);
+            if (plugin != null) plugin.getLogger().warning(lastError);
             return;
         }
 
         File[] files = statsFolder.listFiles((dir, name) -> name.endsWith(".json"));
         if (files == null) {
             lastError = "Could not list stats files in " + statsFolder.getAbsolutePath();
-            plugin.getLogger().warning(lastError);
+            if (plugin != null) plugin.getLogger().warning(lastError);
             return;
         }
 
@@ -81,7 +85,9 @@ public final class StatsCache {
                     newByName.put(normalize(previousProfile.name()), previousProfile);
                     retained++;
                 }
-                plugin.getLogger().warning("Could not parse stats file " + file.getName() + ": " + ex.getMessage());
+                if (plugin != null) {
+                    plugin.getLogger().warning("Could not parse stats file " + file.getName() + ": " + ex.getMessage());
+                }
             }
         }
 
@@ -91,16 +97,22 @@ public final class StatsCache {
         if (failed > 0) {
             lastError = "Partial stats refresh: " + failed + " file(s) failed to load; retained last-known-good profiles for "
                     + retained + " player(s).";
-            plugin.getLogger().warning(lastError);
+            if (plugin != null) plugin.getLogger().warning(lastError);
         } else {
             lastError = "";
         }
-        plugin.getLogger().info("Loaded stats for " + loaded + " player(s)." +
-                (retained > 0 ? " Retained " + retained + " last-known-good profile(s)." : ""));
+        if (plugin != null) {
+            plugin.getLogger().info("Loaded stats for " + loaded + " player(s)." +
+                    (retained > 0 ? " Retained " + retained + " last-known-good profile(s)." : ""));
+        }
     }
 
     public void refreshOne(String identifier) {
-        PluginSettings cfg = settings.get();
+        refreshOne(identifier, settings.get());
+    }
+
+    void refreshOne(String identifier, PluginSettings settingsSnapshot) {
+        PluginSettings cfg = Objects.requireNonNull(settingsSnapshot, "settingsSnapshot");
         File statsFolder = statsFolder(cfg);
         Map<UUID, String> userCacheNames = loadUserCacheNames();
         if (!statsFolder.isDirectory()) return;
@@ -112,7 +124,9 @@ public final class StatsCache {
                 try {
                     putProfile(parseProfile(file, directUuid, cfg, userCacheNames));
                 } catch (IOException ex) {
-                    plugin.getLogger().warning("Could not parse stats file for " + directUuid + ": " + ex.getMessage());
+                    if (plugin != null) {
+                        plugin.getLogger().warning("Could not parse stats file for " + directUuid + ": " + ex.getMessage());
+                    }
                 }
             }
             return;
