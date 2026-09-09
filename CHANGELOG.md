@@ -17,9 +17,11 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 ### Changed
 
 - Updated the project and packaged plugin version to 1.0.13.
+- Made build and release artifacts reproducible and verifiable by explicitly targeting Java 25, enabling deterministic JAR output, validating plugin metadata and the listener registration ABI in CI, checking byte-for-byte rebuilds, validating the Gradle wrapper distribution, and attaching release files from the already verified CI artifact instead of rebuilding a second copy ([#12](https://github.com/mccreeper1318/PinnacleStats/issues/12)).
 
 ### Dependencies
 
+- Pinned `io.papermc.paper:paper-api` from the floating `26.2.build.+` selector to `26.2.build.121-stable`.
 - Updated `actions/checkout` from `5` to `7`
 - Updated `actions/upload-artifact` from `4` to `7`
 - Updated `gradle/actions` from `4` to `6`
