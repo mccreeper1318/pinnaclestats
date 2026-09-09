@@ -198,18 +198,18 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         try {
             if (shuttingDown.get()) return;
 
-            // Snapshot policy: work already in progress keeps the generation it started with.
-            // A reload is published atomically and is used by the next operation that starts.
-            PluginSettings cfg = settings.get();
-            boolean refreshed = false;
-            while (!shuttingDown.get()) {
-                RefreshRequestQueue.Batch batch = refreshRequests.takeNext();
-                if (batch.isEmpty()) break;
-                refreshed |= processRefreshBatch(batch, cfg);
-            }
+            // Each queued batch starts a new settings-snapshot boundary. Requests that arrive
+            // after a reload therefore use the new generation even if this worker was already running.
+            RefreshBatchDrain.Result<PluginSettings> result = RefreshBatchDrain.drain(
+                    refreshRequests,
+                    settings::get,
+                    () -> !shuttingDown.get(),
+                    this::processRefreshBatch
+            );
 
-            if (refreshed && !shuttingDown.get()) {
-                exportAfterRefreshIfEnabled(cfg);
+            if (result.refreshed() && !shuttingDown.get()) {
+                // Keep the export paired with the settings snapshot of the last successful batch.
+                exportAfterRefreshIfEnabled(result.lastSuccessfulSettings());
             }
         } finally {
             operationLock.unlock();
