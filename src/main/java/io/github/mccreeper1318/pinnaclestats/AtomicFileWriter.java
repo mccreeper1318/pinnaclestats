@@ -9,9 +9,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.EnumSet;
 import java.util.Objects;
+import java.util.Set;
 
 final class AtomicFileWriter {
+    private static final Set<PosixFilePermission> DEFAULT_POSIX_PERMISSIONS = EnumSet.of(
+            PosixFilePermission.OWNER_READ,
+            PosixFilePermission.OWNER_WRITE,
+            PosixFilePermission.GROUP_READ,
+            PosixFilePermission.OTHERS_READ
+    );
+
     @FunctionalInterface
     interface MoveStrategy {
         void move(Path source, Path target) throws IOException;
@@ -50,10 +61,21 @@ final class AtomicFileWriter {
                 channel.force(true);
             }
 
+            applyPublishPermissions(temp, absoluteTarget);
             moveStrategy.move(temp, absoluteTarget);
         } finally {
             Files.deleteIfExists(temp);
         }
+    }
+
+    private static void applyPublishPermissions(Path temp, Path target) throws IOException {
+        PosixFileAttributeView posixView = Files.getFileAttributeView(temp, PosixFileAttributeView.class);
+        if (posixView == null) return;
+
+        Set<PosixFilePermission> permissions = Files.exists(target)
+                ? Files.getPosixFilePermissions(target)
+                : DEFAULT_POSIX_PERMISSIONS;
+        Files.setPosixFilePermissions(temp, permissions);
     }
 
     private static void replaceAtomically(Path source, Path target) throws IOException {
