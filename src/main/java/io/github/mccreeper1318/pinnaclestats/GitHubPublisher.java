@@ -10,6 +10,8 @@ import java.time.Duration;
 import java.util.*;
 
 public final class GitHubPublisher {
+    private static final int MAX_BRANCH_HEAD_ATTEMPTS = 3;
+
     private final PinnacleStatsPlugin plugin;
     private final HttpClient client;
 
@@ -34,7 +36,17 @@ public final class GitHubPublisher {
         }
     }
 
-    private PublishResult publishSingleCommit(PluginSettings cfg, Map<String, String> relativeFiles) throws IOException, InterruptedException {
+    private PublishResult publishSingleCommit(PluginSettings cfg, Map<String, String> relativeFiles)
+            throws IOException, InterruptedException {
+        return BranchHeadRetry.run(
+                MAX_BRANCH_HEAD_ATTEMPTS,
+                () -> publishSingleAttempt(cfg, relativeFiles),
+                message -> plugin.getLogger().warning(message)
+        );
+    }
+
+    private PublishResult publishSingleAttempt(PluginSettings cfg, Map<String, String> relativeFiles)
+            throws IOException, InterruptedException {
         String basePath = trimSlashes(cfg.githubBasePath());
 
         RefInfo ref = getBranchRef(cfg);
@@ -182,6 +194,11 @@ public final class GitHubPublisher {
         HttpResponse<String> response = send(cfg, baseRequest(cfg, uri)
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(MiniJson.stringify(body), StandardCharsets.UTF_8))
                 .build());
+        if (isBranchRefConflictStatus(response.statusCode())) {
+            throw new BranchHeadRetry.ConflictException(
+                    "GitHub update branch ref failed with HTTP " + response.statusCode() + ": " + shorten(response.body())
+            );
+        }
         require2xx(response, "GitHub update branch ref");
     }
 
@@ -221,6 +238,10 @@ public final class GitHubPublisher {
 
     private boolean isRetryableStatus(int statusCode) {
         return statusCode == 429 || statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504;
+    }
+
+    private boolean isBranchRefConflictStatus(int statusCode) {
+        return statusCode == 409 || statusCode == 422;
     }
 
     private long retryDelayMillis(HttpResponse<String> response, int attempt) {
