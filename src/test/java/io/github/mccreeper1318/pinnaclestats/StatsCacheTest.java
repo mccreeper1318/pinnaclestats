@@ -48,6 +48,32 @@ class StatsCacheTest {
                 .count());
     }
 
+    @Test
+    void explicitRefreshSnapshotSurvivesReloadAndNextRefreshUsesNewSettings(@TempDir Path statsFolder) throws Exception {
+        UUID player = UUID.randomUUID();
+        Files.writeString(statsFolder.resolve(player + ".json"), "{\"stats\":{}}\n");
+
+        PluginSettings operationSnapshot = settings(statsFolder, Map.of(player.toString(), "OperationName"));
+        PluginSettings reloadedSettings = settings(statsFolder, Map.of(player.toString(), "ReloadedName"));
+        StatsCache cache = new StatsCache(null, operationSnapshot);
+
+        // Simulate /pstats reload publishing a new generation while an already-started operation
+        // still owns its original immutable snapshot.
+        cache.setSettings(reloadedSettings);
+        cache.refreshOne(player.toString(), operationSnapshot);
+
+        assertEquals("OperationName", cache.findByUuid(player).orElseThrow().name());
+        assertEquals(player, cache.findByName("OperationName").orElseThrow().uuid());
+        assertTrue(cache.findByName("ReloadedName").isEmpty());
+
+        // Work that starts after reload uses the newly published settings generation.
+        cache.refreshOne(player.toString());
+
+        assertEquals("ReloadedName", cache.findByUuid(player).orElseThrow().name());
+        assertEquals(player, cache.findByName("ReloadedName").orElseThrow().uuid());
+        assertTrue(cache.findByName("OperationName").isEmpty());
+    }
+
     private PluginSettings settings(Path statsFolder, Map<String, String> aliases) {
         return new PluginSettings(
                 false,
