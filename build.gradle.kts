@@ -13,7 +13,7 @@ dependencies {
     // Paper 26.1+ uses the new build-based version format.
     // The old 26.2-R0.1-SNAPSHOT coordinate does not exist.
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
-    testImplementation(platform("org.junit:junit-bom:5.13.4"))
+    testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
