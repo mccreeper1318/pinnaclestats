@@ -13,12 +13,22 @@ public final class StatsCache {
     private final PinnacleStatsPlugin plugin;
     private final AtomicReference<PluginSettings> settings;
     private final AtomicReference<CacheSnapshot> cache = new AtomicReference<>(CacheSnapshot.empty());
+    private final PlayerNameStore playerNameStore;
     private volatile Instant lastRefresh = Instant.EPOCH;
     private volatile String lastError = "";
 
     public StatsCache(PinnacleStatsPlugin plugin, PluginSettings settings) {
+        this(plugin, settings, plugin == null
+                ? PlayerNameStore.disabled()
+                : new PlayerNameStore(
+                        plugin.getDataFolder().toPath().resolve("player-names.json"),
+                        message -> plugin.getLogger().warning(message)));
+    }
+
+    StatsCache(PinnacleStatsPlugin plugin, PluginSettings settings, PlayerNameStore playerNameStore) {
         this.plugin = plugin;
         this.settings = new AtomicReference<>(settings);
+        this.playerNameStore = Objects.requireNonNull(playerNameStore, "playerNameStore");
     }
 
     public void setSettings(PluginSettings settings) {
@@ -76,6 +86,7 @@ public final class StatsCache {
         }
 
         cache.set(CacheSnapshot.of(newByName, newByUuid));
+        playerNameStore.rememberAll(newByUuid.values());
         lastRefresh = Instant.now();
         if (failed > 0) {
             lastError = "Partial stats refresh: " + failed + " file(s) failed to load; retained last-known-good profiles for "
@@ -131,6 +142,7 @@ public final class StatsCache {
             newByName.put(normalize(profile.name()), profile);
             return CacheSnapshot.of(newByName, newByUuid);
         });
+        playerNameStore.remember(profile.uuid(), profile.name());
         lastRefresh = Instant.now();
     }
 
@@ -254,12 +266,12 @@ public final class StatsCache {
 
     @SuppressWarnings("unchecked")
     private Map<UUID, String> loadUserCacheNames() {
+        Map<UUID, String> names = new HashMap<>(playerNameStore.snapshot());
         File file = new File("usercache.json");
-        if (!file.isFile()) return Collections.emptyMap();
+        if (!file.isFile()) return names;
         try {
             Object parsed = MiniJson.parse(Files.readString(file.toPath(), StandardCharsets.UTF_8));
-            if (!(parsed instanceof List<?> list)) return Collections.emptyMap();
-            Map<UUID, String> names = new HashMap<>();
+            if (!(parsed instanceof List<?> list)) return names;
             for (Object item : list) {
                 if (!(item instanceof Map<?, ?> raw)) continue;
                 Map<String, Object> entry = (Map<String, Object>) raw;
@@ -274,8 +286,10 @@ public final class StatsCache {
             }
             return names;
         } catch (Exception ex) {
-            plugin.getLogger().warning("Could not read usercache.json for player names: " + ex.getMessage());
-            return Collections.emptyMap();
+            if (plugin != null) {
+                plugin.getLogger().warning("Could not read usercache.json for player names: " + ex.getMessage());
+            }
+            return names;
         }
     }
 
