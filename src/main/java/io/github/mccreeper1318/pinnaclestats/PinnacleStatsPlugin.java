@@ -6,11 +6,12 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 public final class PinnacleStatsPlugin extends JavaPlugin {
-    private PluginSettings settings;
+    private final AtomicReference<PluginSettings> settings = new AtomicReference<>();
     private StatsCache statsCache;
     private StatsApiServer apiServer;
     private StatsExporter statsExporter;
@@ -26,10 +27,11 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         refreshRequests.reset();
         saveDefaultConfig();
         reloadPluginSettings();
+        PluginSettings initialSettings = settings.get();
 
-        this.statsCache = new StatsCache(this, settings);
-        this.apiServer = new StatsApiServer(this, settings, statsCache);
-        this.statsExporter = new StatsExporter(this, settings, statsCache);
+        this.statsCache = new StatsCache(this, initialSettings);
+        this.apiServer = new StatsApiServer(this, initialSettings, statsCache);
+        this.statsExporter = new StatsExporter(this, initialSettings, statsCache);
 
         PluginCommand command = getCommand("pstats");
         if (command != null) {
@@ -40,14 +42,14 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
 
         Bukkit.getPluginManager().registerEvents(new PlayerStatListener(this), (Plugin) this);
 
-        if (settings.apiEnabled()) {
+        if (initialSettings.apiEnabled()) {
             apiServer.start();
         } else {
             getLogger().info("Stats API is disabled in config.yml.");
         }
 
         refreshAsync();
-        scheduleRefreshTask();
+        scheduleRefreshTask(initialSettings);
         getLogger().info("PinnacleStats enabled.");
     }
 
@@ -62,11 +64,13 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
 
         operationLock.lock();
         try {
-            if (settings != null && settings.refreshOnServerStop() && statsCache != null) {
+            // Shutdown work uses one immutable snapshot from start to finish.
+            PluginSettings cfg = settings.get();
+            if (cfg != null && cfg.refreshOnServerStop() && statsCache != null) {
                 try {
-                    statsCache.refreshAll();
-                    if (settings.exportAfterRefresh() && statsExporter != null) {
-                        statsExporter.exportLocalOnly();
+                    statsCache.refreshAll(cfg);
+                    if (cfg.exportAfterRefresh() && statsExporter != null) {
+                        statsExporter.exportLocalOnly(cfg);
                     }
                 } catch (Exception ex) {
                     getLogger().warning("Could not refresh stats during shutdown: " + ex.getMessage());
@@ -85,24 +89,25 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
     public void reloadEverything() {
         reloadConfig();
         reloadPluginSettings();
+        PluginSettings reloadedSettings = settings.get();
         if (statsCache != null) {
-            statsCache.setSettings(settings);
+            statsCache.setSettings(reloadedSettings);
         }
         if (statsExporter != null) {
-            statsExporter.setSettings(settings);
+            statsExporter.setSettings(reloadedSettings);
         }
         if (apiServer != null) {
-            apiServer.restart(settings);
+            apiServer.restart(reloadedSettings);
         }
-        scheduleRefreshTask();
+        scheduleRefreshTask(reloadedSettings);
     }
 
     public void reloadPluginSettings() {
-        this.settings = PluginSettings.fromConfig(getConfig());
+        settings.set(PluginSettings.fromConfig(getConfig()));
     }
 
     public PluginSettings settings() {
-        return settings;
+        return settings.get();
     }
 
     public StatsCache statsCache() {
@@ -156,7 +161,12 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
                 if (shuttingDown.get()) {
                     result = new StatsExporter.ExportResult(false, 0, statsExporter.lastExport(), "PinnacleStats is shutting down.");
                 } else {
-                    result = publishToGitHub ? statsExporter.exportAndMaybePublish() : statsExporter.exportLocalOnly();
+                    // Capture after acquiring the operation lock so a queued export sees the newest settings,
+                    // then keep this same snapshot for local export and optional GitHub publication.
+                    PluginSettings cfg = settings.get();
+                    result = publishToGitHub
+                            ? statsExporter.exportAndMaybePublish(cfg)
+                            : statsExporter.exportLocalOnly(cfg);
                 }
             } catch (Exception ex) {
                 result = new StatsExporter.ExportResult(false, 0, statsExporter.lastExport(), ex.getMessage());
@@ -188,25 +198,28 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         try {
             if (shuttingDown.get()) return;
 
+            // Snapshot policy: work already in progress keeps the generation it started with.
+            // A reload is published atomically and is used by the next operation that starts.
+            PluginSettings cfg = settings.get();
             boolean refreshed = false;
             while (!shuttingDown.get()) {
                 RefreshRequestQueue.Batch batch = refreshRequests.takeNext();
                 if (batch.isEmpty()) break;
-                refreshed |= processRefreshBatch(batch);
+                refreshed |= processRefreshBatch(batch, cfg);
             }
 
             if (refreshed && !shuttingDown.get()) {
-                exportAfterRefreshIfEnabled();
+                exportAfterRefreshIfEnabled(cfg);
             }
         } finally {
             operationLock.unlock();
         }
     }
 
-    private boolean processRefreshBatch(RefreshRequestQueue.Batch batch) {
+    private boolean processRefreshBatch(RefreshRequestQueue.Batch batch, PluginSettings cfg) {
         if (batch.fullRefresh()) {
             try {
-                statsCache.refreshAll();
+                statsCache.refreshAll(cfg);
                 return true;
             } catch (Exception ex) {
                 getLogger().warning("Could not refresh player stats: " + ex.getMessage());
@@ -218,7 +231,7 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         boolean refreshed = false;
         for (String player : batch.players()) {
             try {
-                statsCache.refreshOne(player);
+                statsCache.refreshOne(player, cfg);
                 refreshed = true;
             } catch (Exception ex) {
                 getLogger().warning("Could not refresh stats for " + player + ": " + ex.getMessage());
@@ -227,22 +240,26 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         return refreshed;
     }
 
-    private void exportAfterRefreshIfEnabled() {
-        if (settings != null && settings.exportAfterRefresh() && statsExporter != null) {
-            if (settings.githubPublishAfterRefresh()) {
-                statsExporter.exportAndMaybePublish();
+    private void exportAfterRefreshIfEnabled(PluginSettings cfg) {
+        if (cfg != null && cfg.exportAfterRefresh() && statsExporter != null) {
+            if (cfg.githubPublishAfterRefresh()) {
+                statsExporter.exportAndMaybePublish(cfg);
             } else {
-                statsExporter.exportLocalOnly();
+                statsExporter.exportLocalOnly(cfg);
             }
         }
     }
 
     private void scheduleRefreshTask() {
+        scheduleRefreshTask(settings.get());
+    }
+
+    private void scheduleRefreshTask(PluginSettings cfg) {
         if (refreshTaskId != -1) {
             Bukkit.getScheduler().cancelTask(refreshTaskId);
             refreshTaskId = -1;
         }
-        int minutes = settings.refreshIntervalMinutes();
+        int minutes = cfg.refreshIntervalMinutes();
         if (minutes <= 0) {
             getLogger().info("Scheduled stats refresh is disabled.");
             return;
