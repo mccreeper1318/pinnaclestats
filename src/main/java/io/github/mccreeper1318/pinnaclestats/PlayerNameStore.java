@@ -20,6 +20,7 @@ final class PlayerNameStore {
     private final Path file;
     private final Consumer<String> warningLogger;
     private final Map<UUID, String> names = new HashMap<>();
+    private boolean dirty;
 
     PlayerNameStore(Path file, Consumer<String> warningLogger) {
         this.file = file;
@@ -38,22 +39,23 @@ final class PlayerNameStore {
     synchronized void remember(UUID uuid, String name) {
         if (!isPersistable(uuid, name)) return;
         String cleaned = name.trim();
-        if (cleaned.equals(names.get(uuid))) return;
-        names.put(uuid, cleaned);
-        save();
+        if (!cleaned.equals(names.get(uuid))) {
+            names.put(uuid, cleaned);
+            dirty = true;
+        }
+        if (dirty) save();
     }
 
     synchronized void rememberAll(Collection<StatsProfile> profiles) {
-        boolean changed = false;
         for (StatsProfile profile : profiles) {
             if (!isPersistable(profile.uuid(), profile.name())) continue;
             String cleaned = profile.name().trim();
             if (!cleaned.equals(names.get(profile.uuid()))) {
                 names.put(profile.uuid(), cleaned);
-                changed = true;
+                dirty = true;
             }
         }
-        if (changed) save();
+        if (dirty) save();
     }
 
     @SuppressWarnings("unchecked")
@@ -83,7 +85,10 @@ final class PlayerNameStore {
     }
 
     private void save() {
-        if (file == null) return;
+        if (file == null) {
+            dirty = false;
+            return;
+        }
         try {
             Path parent = file.getParent();
             if (parent != null) Files.createDirectories(parent);
@@ -102,6 +107,7 @@ final class PlayerNameStore {
             } catch (AtomicMoveNotSupportedException ex) {
                 Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
             }
+            dirty = false;
         } catch (IOException ex) {
             warn("Could not save persistent player-name cache: " + ex.getMessage());
         }
