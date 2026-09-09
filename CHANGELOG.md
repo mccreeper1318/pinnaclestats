@@ -2,6 +2,17 @@
 
 All notable PinnacleStats changes are documented here. Historical entries are based on the published GitHub release notes and repository release history.
 
+## 1.0.13 - Unreleased
+
+### Fixed
+
+- Preserved each player's last-known-good cached profile when that player's statistics file temporarily fails to read or parse during a full refresh, while still updating successfully parsed profiles and reporting the failed-file count through status and logs.
+- Removed obsolete cached name mappings during single-player refreshes so username or configured override changes immediately replace the old identity without duplicating the same UUID in lookups or exports ([#6](https://github.com/mccreeper1318/PinnacleStats/issues/6)).
+
+### Changed
+
+- Updated the project and packaged plugin version to 1.0.13.
+
 ## [1.0.11] - 2026-08-30
 
 ### Fixed
