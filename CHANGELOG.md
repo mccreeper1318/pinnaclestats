@@ -11,6 +11,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Persisted resolved UUID-to-name mappings in the plugin data folder so historical players retain username-based lookups and exports across server restarts, while configured overrides and current `usercache.json` names continue to take precedence ([#7](https://github.com/mccreeper1318/PinnacleStats/issues/7)).
 - Wrote local export JSON through same-directory temporary files and atomic replacement where supported, preserving previous live files on failed writes, cleaning temporary files, and publishing `index.json` only after player files are ready ([#8](https://github.com/mccreeper1318/PinnacleStats/issues/8)).
 - Retried the complete GitHub publishing transaction when a concurrent branch update causes a ref conflict, rebuilding from the latest branch head without force-pushing and returning a bounded failure if the branch keeps changing ([#9](https://github.com/mccreeper1318/PinnacleStats/issues/9)).
+- Recognized GitHub rate-limited `403` responses without retrying authentication or permission failures, honored `Retry-After` first and `X-RateLimit-Reset` for primary limits, and kept retry counts and delays bounded ([#10](https://github.com/mccreeper1318/PinnacleStats/issues/10)).
 
 ### Changed
 
