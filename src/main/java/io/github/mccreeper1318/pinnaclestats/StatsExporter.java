@@ -29,15 +29,23 @@ public final class StatsExporter {
     }
 
     public ExportResult exportLocalOnly() {
-        return export(false);
+        return exportLocalOnly(settings.get());
+    }
+
+    ExportResult exportLocalOnly(PluginSettings settingsSnapshot) {
+        return export(false, settingsSnapshot);
     }
 
     public ExportResult exportAndMaybePublish() {
-        return export(true);
+        return exportAndMaybePublish(settings.get());
     }
 
-    private ExportResult export(boolean publishToGitHub) {
-        PluginSettings cfg = settings.get();
+    ExportResult exportAndMaybePublish(PluginSettings settingsSnapshot) {
+        return export(true, settingsSnapshot);
+    }
+
+    private ExportResult export(boolean publishToGitHub, PluginSettings cfg) {
+        Objects.requireNonNull(cfg, "settingsSnapshot");
         try {
             Map<String, String> files = buildExportFiles(cfg);
 
