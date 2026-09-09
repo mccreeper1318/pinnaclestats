@@ -7,10 +7,26 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 ### Fixed
 
 - Preserved each player's last-known-good cached profile when that player's statistics file temporarily fails to read or parse during a full refresh, while still updating successfully parsed profiles and reporting the failed-file count through status and logs.
+- Removed obsolete cached name mappings during single-player refreshes so username or configured override changes immediately replace the old identity without duplicating the same UUID in lookups or exports ([#6](https://github.com/mccreeper1318/PinnacleStats/issues/6)).
+- Persisted resolved UUID-to-name mappings in the plugin data folder so historical players retain username-based lookups and exports across server restarts, while configured overrides and current `usercache.json` names continue to take precedence ([#7](https://github.com/mccreeper1318/PinnacleStats/issues/7)).
+- Wrote local export JSON through same-directory temporary files and atomic replacement where supported, preserving previous live files on failed writes, cleaning temporary files, and publishing `index.json` only after player files are ready ([#8](https://github.com/mccreeper1318/PinnacleStats/issues/8)).
+- Retried the complete GitHub publishing transaction when a concurrent branch update causes a ref conflict, rebuilding from the latest branch head without force-pushing and returning a bounded failure if the branch keeps changing ([#9](https://github.com/mccreeper1318/PinnacleStats/issues/9)).
+- Recognized GitHub rate-limited `403` responses without retrying authentication or permission failures, honored `Retry-After` first and `X-RateLimit-Reset` for primary limits, and kept retry counts and delays bounded ([#10](https://github.com/mccreeper1318/PinnacleStats/issues/10)).
+- Published reloaded settings safely and captured one immutable configuration snapshot per refresh, export, publish, and shutdown operation so in-flight work cannot mix configuration generations while subsequently started work sees the reload ([#11](https://github.com/mccreeper1318/PinnacleStats/issues/11)).
 
 ### Changed
 
 - Updated the project and packaged plugin version to 1.0.13.
+- Made build and release artifacts reproducible and verifiable by explicitly targeting Java 25, enabling deterministic JAR output, validating plugin metadata and the listener registration ABI in CI, checking byte-for-byte rebuilds, validating the Gradle wrapper distribution, and attaching release files from the already verified CI artifact instead of rebuilding a second copy ([#12](https://github.com/mccreeper1318/PinnacleStats/issues/12)).
+
+### Dependencies
+
+- Pinned `io.papermc.paper:paper-api` from the floating `26.2.build.+` selector to `26.2.build.121-stable`.
+- Updated `actions/checkout` from `5` to `7`
+- Updated `actions/upload-artifact` from `4` to `7`
+- Updated `gradle/actions` from `4` to `6`
+- Updated `gradle-wrapper` from `9.3.0` to `9.7.1`
+- Updated `org.junit:junit-bom` from `5.13.4` to `6.1.3`
 
 ## [1.0.11] - 2026-08-30
 

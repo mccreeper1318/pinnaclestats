@@ -10,6 +10,8 @@ import java.time.Duration;
 import java.util.*;
 
 public final class GitHubPublisher {
+    private static final int MAX_BRANCH_HEAD_ATTEMPTS = 3;
+
     private final PinnacleStatsPlugin plugin;
     private final HttpClient client;
 
@@ -34,7 +36,17 @@ public final class GitHubPublisher {
         }
     }
 
-    private PublishResult publishSingleCommit(PluginSettings cfg, Map<String, String> relativeFiles) throws IOException, InterruptedException {
+    private PublishResult publishSingleCommit(PluginSettings cfg, Map<String, String> relativeFiles)
+            throws IOException, InterruptedException {
+        return BranchHeadRetry.run(
+                MAX_BRANCH_HEAD_ATTEMPTS,
+                () -> publishSingleAttempt(cfg, relativeFiles),
+                message -> plugin.getLogger().warning(message)
+        );
+    }
+
+    private PublishResult publishSingleAttempt(PluginSettings cfg, Map<String, String> relativeFiles)
+            throws IOException, InterruptedException {
         String basePath = trimSlashes(cfg.githubBasePath());
 
         RefInfo ref = getBranchRef(cfg);
@@ -182,6 +194,11 @@ public final class GitHubPublisher {
         HttpResponse<String> response = send(cfg, baseRequest(cfg, uri)
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(MiniJson.stringify(body), StandardCharsets.UTF_8))
                 .build());
+        if (isBranchRefConflictStatus(response.statusCode())) {
+            throw new BranchHeadRetry.ConflictException(
+                    "GitHub update branch ref failed with HTTP " + response.statusCode() + ": " + shorten(response.body())
+            );
+        }
         require2xx(response, "GitHub update branch ref");
     }
 
@@ -193,12 +210,23 @@ public final class GitHubPublisher {
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 lastResponse = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-                if (!isRetryableStatus(lastResponse.statusCode()) || attempt == maxAttempts) {
+                Map<String, List<String>> headers = lastResponse.headers().map();
+                String responseBody = lastResponse.body();
+                if (!GitHubRetryPolicy.isRetryable(lastResponse.statusCode(), headers, responseBody) || attempt == maxAttempts) {
                     return lastResponse;
                 }
 
-                long delay = retryDelayMillis(lastResponse, attempt);
-                plugin.getLogger().warning("GitHub returned HTTP " + lastResponse.statusCode()
+                long delay = GitHubRetryPolicy.retryDelayMillis(
+                        lastResponse.statusCode(),
+                        headers,
+                        responseBody,
+                        attempt,
+                        System.currentTimeMillis() / 1000L
+                );
+                String reason = GitHubRetryPolicy.isRateLimited(lastResponse.statusCode(), headers, responseBody)
+                        ? "GitHub rate limit returned HTTP "
+                        : "GitHub returned HTTP ";
+                plugin.getLogger().warning(reason + lastResponse.statusCode()
                         + " while publishing stats. Retrying in " + (delay / 1000.0)
                         + "s (attempt " + attempt + "/" + maxAttempts + ").");
                 Thread.sleep(delay);
@@ -207,7 +235,7 @@ public final class GitHubPublisher {
                 if (attempt == maxAttempts) {
                     throw ex;
                 }
-                long delay = defaultRetryDelayMillis(attempt);
+                long delay = GitHubRetryPolicy.defaultRetryDelayMillis(attempt);
                 plugin.getLogger().warning("GitHub request failed while publishing stats: " + ex.getMessage()
                         + ". Retrying in " + (delay / 1000.0)
                         + "s (attempt " + attempt + "/" + maxAttempts + ").");
@@ -219,39 +247,20 @@ public final class GitHubPublisher {
         return lastResponse;
     }
 
-    private boolean isRetryableStatus(int statusCode) {
-        return statusCode == 429 || statusCode == 500 || statusCode == 502 || statusCode == 503 || statusCode == 504;
-    }
-
-    private long retryDelayMillis(HttpResponse<String> response, int attempt) {
-        Optional<String> retryAfter = response.headers().firstValue("Retry-After");
-        if (retryAfter.isPresent()) {
-            try {
-                long seconds = Long.parseLong(retryAfter.get().trim());
-                if (seconds > 0) return Math.min(seconds * 1000L, 30000L);
-            } catch (NumberFormatException ignored) {
-                // Fall back to exponential delay below.
-            }
-        }
-        return defaultRetryDelayMillis(attempt);
-    }
-
-    private long defaultRetryDelayMillis(int attempt) {
-        return switch (attempt) {
-            case 1 -> 3000L;
-            case 2 -> 7000L;
-            default -> 15000L;
-        };
+    private boolean isBranchRefConflictStatus(int statusCode) {
+        return statusCode == 409 || statusCode == 422;
     }
 
     private void require2xx(HttpResponse<String> response, String action) throws IOException {
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            if (isRetryableStatus(response.statusCode())) {
+            Map<String, List<String>> headers = response.headers().map();
+            String responseBody = response.body();
+            if (GitHubRetryPolicy.isRetryable(response.statusCode(), headers, responseBody)) {
                 throw new IOException(action + " failed with HTTP " + response.statusCode()
-                        + ". GitHub may be temporarily unavailable or overloaded. Try /pstats publish again in a few minutes. Response: "
-                        + shorten(response.body()));
+                        + ". GitHub may be temporarily unavailable, overloaded, or rate limited. Try /pstats publish again later. Response: "
+                        + shorten(responseBody));
             }
-            throw new IOException(action + " failed with HTTP " + response.statusCode() + ": " + shorten(response.body()));
+            throw new IOException(action + " failed with HTTP " + response.statusCode() + ": " + shorten(responseBody));
         }
     }
 

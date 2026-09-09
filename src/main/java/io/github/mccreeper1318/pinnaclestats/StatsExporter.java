@@ -1,8 +1,6 @@
 package io.github.mccreeper1318.pinnaclestats;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.*;
@@ -13,6 +11,7 @@ public final class StatsExporter {
     private final StatsCache cache;
     private final AtomicReference<PluginSettings> settings;
     private final GitHubPublisher gitHubPublisher;
+    private final LocalExportWriter localExportWriter;
     private volatile Instant lastExport = Instant.EPOCH;
     private volatile String lastExportError = "";
     private volatile String lastPublishResult = "Not published yet.";
@@ -22,6 +21,7 @@ public final class StatsExporter {
         this.cache = cache;
         this.settings = new AtomicReference<>(settings);
         this.gitHubPublisher = new GitHubPublisher(plugin);
+        this.localExportWriter = new LocalExportWriter();
     }
 
     public void setSettings(PluginSettings settings) {
@@ -29,15 +29,23 @@ public final class StatsExporter {
     }
 
     public ExportResult exportLocalOnly() {
-        return export(false);
+        return exportLocalOnly(settings.get());
+    }
+
+    ExportResult exportLocalOnly(PluginSettings settingsSnapshot) {
+        return export(false, settingsSnapshot);
     }
 
     public ExportResult exportAndMaybePublish() {
-        return export(true);
+        return exportAndMaybePublish(settings.get());
     }
 
-    private ExportResult export(boolean publishToGitHub) {
-        PluginSettings cfg = settings.get();
+    ExportResult exportAndMaybePublish(PluginSettings settingsSnapshot) {
+        return export(true, settingsSnapshot);
+    }
+
+    private ExportResult export(boolean publishToGitHub, PluginSettings cfg) {
+        Objects.requireNonNull(cfg, "settingsSnapshot");
         try {
             Map<String, String> files = buildExportFiles(cfg);
 
@@ -107,29 +115,7 @@ public final class StatsExporter {
     }
 
     private void writeLocalFiles(PluginSettings cfg, Map<String, String> files) throws IOException {
-        Path base = Path.of(cfg.localExportFolder());
-        Files.createDirectories(base);
-        cleanLocalUuidNamedPlayerFiles(base);
-        for (Map.Entry<String, String> entry : files.entrySet()) {
-            Path path = base.resolve(entry.getKey()).normalize();
-            if (!path.startsWith(base.normalize())) {
-                throw new IOException("Refusing to write outside export folder: " + entry.getKey());
-            }
-            Files.createDirectories(path.getParent());
-            Files.writeString(path, entry.getValue(), StandardCharsets.UTF_8);
-        }
-    }
-
-    private void cleanLocalUuidNamedPlayerFiles(Path base) throws IOException {
-        Path playersDir = base.resolve("players").normalize();
-        if (!Files.isDirectory(playersDir) || !playersDir.startsWith(base.normalize())) return;
-        try (var stream = Files.list(playersDir)) {
-            for (Path path : stream.toList()) {
-                if (Files.isRegularFile(path) && isUuidFileName(stripJsonExtension(path.getFileName().toString()))) {
-                    Files.deleteIfExists(path);
-                }
-            }
-        }
+        localExportWriter.write(Path.of(cfg.localExportFolder()), files);
     }
 
     public String lastExport() { return lastExport.toString(); }
@@ -148,10 +134,6 @@ public final class StatsExporter {
         } catch (IllegalArgumentException ex) {
             return false;
         }
-    }
-
-    private String stripJsonExtension(String fileName) {
-        return fileName != null && fileName.endsWith(".json") ? fileName.substring(0, fileName.length() - 5) : fileName;
     }
 
     private String prettyJson(Object value) {
