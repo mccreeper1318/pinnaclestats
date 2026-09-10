@@ -2,6 +2,12 @@
 
 All notable PinnacleStats changes are documented here. Historical entries are based on the published GitHub release notes and repository release history.
 
+## 26.2-1.1.4 - Unreleased
+
+### Fixed
+
+- Re-snapshotted plugin settings for each refresh batch as it is dequeued so refresh requests queued after `/pstats reload` use the newly reloaded configuration even when an existing worker is still draining earlier work; automatic export remains paired with the settings snapshot used by the last successful batch.
+
 ## 1.0.13 - 2026-09-09
 
 ### Fixed
