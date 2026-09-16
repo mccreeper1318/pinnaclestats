@@ -33,8 +33,14 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
         String sub = args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
             case "reload" -> {
-                plugin.reloadEverything();
-                sender.sendMessage("§aPinnacleStats config reloaded and API restarted.");
+                try {
+                    plugin.reloadEverything();
+                    sender.sendMessage("§aPinnacleStats config reloaded and API restarted.");
+                } catch (IllegalArgumentException ex) {
+                    String message = "PinnacleStats config reload rejected: " + ex.getMessage();
+                    plugin.getLogger().warning(message);
+                    sender.sendMessage("§c" + message);
+                }
                 return true;
             }
             case "refresh" -> {
