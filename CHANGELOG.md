@@ -8,6 +8,10 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 - Corrected API diagnostics so health is unhealthy before the first successful refresh and after refresh errors, malformed UUID lookup routes return HTTP 400 instead of 500, and invalid critical configuration is rejected with actionable diagnostics for blank paths, colliding player aliases, and GitHub placeholder values ([#16](https://github.com/mccreeper1318/PinnacleStats/issues/16)).
 
+### Dependencies
+
+- Updated `actions/setup-java` from `5` to `6` via Dependabot ([#28](https://github.com/mccreeper1318/pinnaclestats/pull/28)).
+
 ## 26.2-1.1.4 - Unreleased
 
 ### Fixed
