@@ -1,7 +1,7 @@
 name: PinnacleStats
 version: ${version}
 main: io.github.mccreeper1318.pinnaclestats.PinnacleStatsPlugin
-api-version: '1.21'
+api-version: '26.3'
 author: mccreeper1318
 description: Exports formatted Minecraft player statistics for websites, dashboards, and integrations.
 commands:
