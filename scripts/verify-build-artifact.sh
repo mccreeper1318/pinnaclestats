@@ -34,13 +34,13 @@ if ! grep -Fq "$listener_descriptor" <<<"$javap_output"; then
     exit 1
 fi
 
-paper_command_descriptor="org/bukkit/plugin/java/JavaPlugin.registerCommand:(Ljava/lang/String;Ljava/lang/String;Lio/papermc/paper/command/brigadier/BasicCommand;)V"
+paper_command_descriptor="registerCommand:(Ljava/lang/String;Ljava/lang/String;Lio/papermc/paper/command/brigadier/BasicCommand;)V"
 if ! grep -Fq "$paper_command_descriptor" <<<"$javap_output"; then
     echo "PinnacleStatsPlugin does not register /pstats through Paper BasicCommand." >&2
     exit 1
 fi
 
-if grep -Fq "org/bukkit/plugin/java/JavaPlugin.getCommand" <<<"$javap_output"; then
+if grep -Fq "JavaPlugin.getCommand" <<<"$javap_output"; then
     echo "PinnacleStatsPlugin still references obsolete JavaPlugin#getCommand." >&2
     exit 1
 fi
