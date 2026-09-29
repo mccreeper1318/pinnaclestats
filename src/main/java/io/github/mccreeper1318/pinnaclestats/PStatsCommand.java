@@ -1,17 +1,19 @@
 package io.github.mccreeper1318.pinnaclestats;
 
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
+import io.papermc.paper.command.brigadier.BasicCommand;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-public final class PStatsCommand implements CommandExecutor, TabCompleter {
+public final class PStatsCommand implements BasicCommand {
+    private static final String ADMIN_PERMISSION = "pinnaclestats.admin";
+
     private final PinnacleStatsPlugin plugin;
 
     public PStatsCommand(PinnacleStatsPlugin plugin) {
@@ -19,15 +21,16 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
     }
 
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!sender.hasPermission("pinnaclestats.admin")) {
+    public void execute(CommandSourceStack commandSourceStack, String[] args) {
+        CommandSender sender = commandSourceStack.getSender();
+        if (!sender.hasPermission(ADMIN_PERMISSION)) {
             sender.sendMessage("§cYou do not have permission to use this command.");
-            return true;
+            return;
         }
 
         if (args.length == 0 || args[0].equalsIgnoreCase("status")) {
             sendStatus(sender);
-            return true;
+            return;
         }
 
         String sub = args[0].toLowerCase(Locale.ROOT);
@@ -41,7 +44,6 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
                     plugin.getLogger().warning(message);
                     sender.sendMessage("§c" + message);
                 }
-                return true;
             }
             case "refresh" -> {
                 if (args.length >= 2) {
@@ -51,7 +53,6 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
                     plugin.refreshAsync();
                     sender.sendMessage("§aRefreshing all cached player stats.");
                 }
-                return true;
             }
             case "export" -> {
                 sender.sendMessage("§eStarting PinnacleStats local export in the background. This will not publish to GitHub.");
@@ -62,7 +63,6 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
                         sender.sendMessage("§cPinnacleStats local export failed: " + result.message());
                     }
                 });
-                return true;
             }
             case "publish" -> {
                 sender.sendMessage("§eStarting PinnacleStats GitHub publish in the background. The publish will be sent as one commit.");
@@ -73,21 +73,36 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
                         sender.sendMessage("§cPinnacleStats publish failed: " + result.message());
                     }
                 });
-                return true;
             }
             case "debug" -> {
                 if (args.length < 2) {
                     sender.sendMessage("§eUsage: /pstats debug <player|uuid>");
-                    return true;
+                    return;
                 }
                 sendDebug(sender, args[1]);
-                return true;
             }
-            default -> {
-                sender.sendMessage("§eUsage: /pstats <status|reload|refresh|export|publish|debug>");
-                return true;
-            }
+            default -> sender.sendMessage("§eUsage: /pstats <status|reload|refresh|export|publish|debug>");
         }
+    }
+
+    @Override
+    public Collection<String> suggest(CommandSourceStack commandSourceStack, String[] args) {
+        CommandSender sender = commandSourceStack.getSender();
+        if (!sender.hasPermission(ADMIN_PERMISSION)) return List.of();
+        if (args.length == 1) {
+            return filter(Arrays.asList("status", "reload", "refresh", "export", "publish", "debug"), args[0]);
+        }
+        if (args.length == 2 && (args[0].equalsIgnoreCase("refresh") || args[0].equalsIgnoreCase("debug"))) {
+            List<String> names = new ArrayList<>();
+            for (StatsProfile profile : plugin.statsCache().allProfiles()) names.add(profile.name());
+            return filter(names, args[1]);
+        }
+        return List.of();
+    }
+
+    @Override
+    public String permission() {
+        return ADMIN_PERMISSION;
     }
 
     private void sendStatus(CommandSender sender) {
@@ -127,20 +142,6 @@ public final class PStatsCommand implements CommandExecutor, TabCompleter {
 
     private UUID tryUuid(String text) {
         try { return UUID.fromString(text); } catch (Exception ignored) { return null; }
-    }
-
-    @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        if (!sender.hasPermission("pinnaclestats.admin")) return List.of();
-        if (args.length == 1) {
-            return filter(Arrays.asList("status", "reload", "refresh", "export", "publish", "debug"), args[0]);
-        }
-        if (args.length == 2 && (args[0].equalsIgnoreCase("refresh") || args[0].equalsIgnoreCase("debug"))) {
-            List<String> names = new ArrayList<>();
-            for (StatsProfile profile : plugin.statsCache().allProfiles()) names.add(profile.name());
-            return filter(names, args[1]);
-        }
-        return List.of();
     }
 
     private List<String> filter(List<String> values, String token) {

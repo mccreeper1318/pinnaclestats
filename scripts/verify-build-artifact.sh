@@ -34,4 +34,31 @@ if ! grep -Fq "$listener_descriptor" <<<"$javap_output"; then
     exit 1
 fi
 
-echo "Verified $actual_jar_name: version $project_version, Java 25 bytecode, and listener registration descriptor."
+paper_command_descriptor="registerCommand:(Ljava/lang/String;Ljava/lang/String;Lio/papermc/paper/command/brigadier/BasicCommand;)V"
+if ! grep -Fq "$paper_command_descriptor" <<<"$javap_output"; then
+    echo "PinnacleStatsPlugin does not register /pstats through Paper BasicCommand." >&2
+    exit 1
+fi
+
+if grep -Fq "JavaPlugin.getCommand" <<<"$javap_output"; then
+    echo "PinnacleStatsPlugin still references obsolete JavaPlugin#getCommand." >&2
+    exit 1
+fi
+
+command_javap_output="$(javap -classpath "$jar_path" -verbose io.github.mccreeper1318.pinnaclestats.PStatsCommand)"
+if ! grep -Fq "io/papermc/paper/command/brigadier/BasicCommand" <<<"$command_javap_output"; then
+    echo "PStatsCommand does not implement Paper BasicCommand." >&2
+    exit 1
+fi
+
+if grep -Eq "org/bukkit/command/(CommandExecutor|TabCompleter)" <<<"$command_javap_output"; then
+    echo "PStatsCommand still references obsolete Bukkit command executor/completer APIs." >&2
+    exit 1
+fi
+
+if unzip -p "$jar_path" plugin.yml | grep -Eq '^commands:'; then
+    echo "plugin.yml still declares legacy YAML commands." >&2
+    exit 1
+fi
+
+echo "Verified $actual_jar_name: version $project_version, Java 25 bytecode, listener ABI, and Paper BasicCommand registration."

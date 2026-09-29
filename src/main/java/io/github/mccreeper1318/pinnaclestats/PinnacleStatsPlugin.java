@@ -1,7 +1,6 @@
 package io.github.mccreeper1318.pinnaclestats;
 
 import org.bukkit.Bukkit;
-import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -33,12 +32,11 @@ public final class PinnacleStatsPlugin extends JavaPlugin {
         this.apiServer = new StatsApiServer(this, initialSettings, statsCache);
         this.statsExporter = new StatsExporter(this, initialSettings, statsCache);
 
-        PluginCommand command = getCommand("pstats");
-        if (command != null) {
-            PStatsCommand executor = new PStatsCommand(this);
-            command.setExecutor(executor);
-            command.setTabCompleter(executor);
-        }
+        registerCommand(
+                "pstats",
+                "Manage PinnacleStats cache, local exports, GitHub publishing, and optional API.",
+                new PStatsCommand(this)
+        );
 
         Bukkit.getPluginManager().registerEvents(new PlayerStatListener(this), (Plugin) this);
 
