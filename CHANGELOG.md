@@ -9,8 +9,17 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Corrected API diagnostics so health is unhealthy before the first successful refresh and after refresh errors, malformed UUID lookup routes return HTTP 400 instead of 500, and invalid critical configuration is rejected with actionable diagnostics for blank paths, colliding player aliases, and GitHub placeholder values ([#16](https://github.com/mccreeper1318/PinnacleStats/issues/16)).
 - Re-snapshotted plugin settings for each refresh batch as it is dequeued so refresh requests queued after `/pstats reload` use the newly reloaded configuration even when an existing worker is still draining earlier work; automatic export remains paired with the settings snapshot used by the last successful batch.
 
+### Changed
+
+- Updated PinnacleStats for Paper 26.3 beta compatibility.
+- Updated the plugin API declaration to Paper 26.3.
+- Updated the project and packaged plugin version to 1.0.14.
+- Updated user-facing documentation for Paper 26.3 beta and Java 25 requirements.
+- Verified the existing listener-registration ABI and supported vanilla statistics JSON categories remain compatible with Paper 26.3 beta.
+
 ### Dependencies
 
+- Updated `io.papermc.paper:paper-api` from `26.2.build.121-stable` to `26.3.build.134-beta`.
 - Updated `actions/setup-java` from `5` to `6` via Dependabot ([#28](https://github.com/mccreeper1318/pinnaclestats/pull/28)).
 
 ## 1.0.13 - 2026-09-09
