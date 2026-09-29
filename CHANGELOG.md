@@ -2,7 +2,7 @@
 
 All notable PinnacleStats changes are documented here. Historical entries are based on the published GitHub release notes and repository release history.
 
-## 1.0.14 - Unreleased
+## 1.1.0 - Unreleased
 
 ### Fixed
 
@@ -13,7 +13,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 - Updated PinnacleStats for Paper 26.3 beta compatibility.
 - Updated the plugin API declaration to Paper 26.3.
-- Updated the project and packaged plugin version to 1.0.14.
+- Updated the project and packaged plugin version to 1.1.0.
 - Updated user-facing documentation for Paper 26.3 beta and Java 25 requirements.
 - Verified the existing listener-registration ABI and supported vanilla statistics JSON categories remain compatible with Paper 26.3 beta.
 - Migrated `/pstats` from the obsolete Bukkit command executor/completer path to Paper 26.3 `BasicCommand` registration while preserving subcommands, permissions, and tab completion ([#35](https://github.com/mccreeper1318/pinnaclestats/issues/35)).
