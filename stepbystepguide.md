@@ -36,11 +36,14 @@ Start with the common installation steps below. After they work, continue to the
 
 Make sure you have:
 
-1. A Paper Minecraft server supported by the PinnacleStats release.
-2. Java 25 when running a Paper 26.2 release of the plugin.
+1. A Paper 26.3 server supported by the PinnacleStats release. PinnacleStats 1.0.14 targets Paper 26.3; while Paper 26.3 remains in beta, use a Paper 26.3 beta build or a newer compatible 26.3 release.
+2. Java 25.
 3. Access to the server files through a hosting control panel, file manager, SFTP client, or the server computer.
 4. Permission to stop and start the Minecraft server.
 5. Operator status or the `pinnaclestats.admin` permission if you will run commands in-game.
+
+> [!NOTE]
+> PinnacleStats 1.0.14 declares plugin API version `26.3` and is not intended for Paper 26.2.
 
 The examples use commands such as `/pstats status`. Include the slash in Minecraft chat. Most server consoles expect the same command without the slash, such as `pstats status`.
 
@@ -51,7 +54,7 @@ The examples use commands such as `/pstats status`. Include the slash in Minecra
 1. Open the PinnacleStats repository on GitHub.
 2. Open **Releases**.
 3. Open the release you want to install.
-4. Download the file named like `PinnacleStats-1.0.11.jar` from the release assets.
+4. Download the file named like `PinnacleStats-1.0.14.jar` from the release assets.
 5. Do not download the automatically generated **Source code** ZIP or TAR file. Paper needs the `.jar` file.
 
 ### Step 2: Back up an existing installation
@@ -69,7 +72,7 @@ Do not leave two PinnacleStats JAR versions in the `plugins/` directory.
 
 1. Stop the server if it is running.
 2. Open the server's `plugins/` directory.
-3. Upload the downloaded PinnacleStats `.jar` file, such as `PinnacleStats-1.0.11.jar`, into that directory.
+3. Upload the downloaded PinnacleStats `.jar` file, such as `PinnacleStats-1.0.14.jar`, into that directory.
 4. Start the server.
 5. Wait until the server finishes starting.
 6. Look for `PinnacleStats enabled.` in the server log.
