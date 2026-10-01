@@ -23,6 +23,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 - Updated `io.papermc.paper:paper-api` from `26.2.build.121-stable` to `26.3.build.134-beta`.
 - Updated `actions/setup-java` from `5` to `6` via Dependabot ([#28](https://github.com/mccreeper1318/pinnaclestats/pull/28)).
+- Updated `gradle-wrapper` from `9.7.1` to `9.8.0` via Dependabot ([#41](https://github.com/mccreeper1318/pinnaclestats/pull/41)).
 
 ## 1.0.13 - 2026-09-09
 
