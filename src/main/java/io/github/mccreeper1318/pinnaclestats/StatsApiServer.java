@@ -88,7 +88,13 @@ public final class StatsApiServer {
             }
             if (path.startsWith("/api/player/uuid/")) {
                 String uuidText = decode(path.substring("/api/player/uuid/".length()));
-                UUID uuid = UUID.fromString(uuidText);
+                UUID uuid;
+                try {
+                    uuid = UUID.fromString(uuidText);
+                } catch (IllegalArgumentException ex) {
+                    send(exchange, 400, error("Malformed player UUID."));
+                    return;
+                }
                 Optional<StatsProfile> profile = cache.findByUuid(uuid);
                 send(exchange, profile.isPresent() ? 200 : 404, profile.map(StatsProfile::data).orElseGet(() -> error("Player UUID not found.")));
                 return;
@@ -106,8 +112,9 @@ public final class StatsApiServer {
     }
 
     private Map<String, Object> health() {
+        boolean healthy = !Instant.EPOCH.equals(cache.lastRefresh()) && cache.lastError().isBlank();
         return mapOf(
-                "ok", true,
+                "ok", healthy,
                 "plugin", "PinnacleStats",
                 "version", plugin.getDescription().getVersion(),
                 "playersLoaded", cache.size(),
