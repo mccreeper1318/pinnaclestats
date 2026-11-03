@@ -44,7 +44,8 @@ class LocalExportWriterTest {
         assertEquals(List.of(
                 "players/TestPlayer.json",
                 "players-by-uuid/" + uuid + ".json",
-                "index.json"
+                "index.json",
+                ManagedExportManifest.FILE_NAME
         ), replacements);
         assertEquals("{\"player\":\"TestPlayer\"}\n", Files.readString(base.resolve("players/TestPlayer.json")));
         assertEquals("{\"uuid\":\"" + uuid + "\"}\n", Files.readString(base.resolve("players-by-uuid/" + uuid + ".json")));
@@ -100,6 +101,75 @@ class LocalExportWriterTest {
         try (var stream = Files.walk(base)) {
             assertTrue(stream.noneMatch(path -> path.getFileName().toString().endsWith(".tmp")));
         }
+    }
+
+    @Test
+    void prunesRenamedAndRemovedManagedFilesButPreservesUntrackedFiles(@TempDir Path tempDir) throws Exception {
+        Path base = tempDir.resolve("export");
+        LocalExportWriter writer = new LocalExportWriter();
+
+        UUID retainedUuid = UUID.randomUUID();
+        UUID removedUuid = UUID.randomUUID();
+        UUID untrackedUuid = UUID.randomUUID();
+
+        Path unrelatedFile = base.resolve("players/KeepMe.json");
+        Path unrelatedUuidPlayerFile = base.resolve("players/" + untrackedUuid + ".json");
+        Path unrelatedUuidLookupFile = base.resolve("players-by-uuid/" + untrackedUuid + ".json");
+        Files.createDirectories(unrelatedFile.getParent());
+        Files.createDirectories(unrelatedUuidLookupFile.getParent());
+        Files.writeString(unrelatedFile, "unrelated\n");
+        Files.writeString(unrelatedUuidPlayerFile, "unrelated uuid-shaped player file\n");
+        Files.writeString(unrelatedUuidLookupFile, "unrelated uuid lookup\n");
+
+        Map<String, String> firstExport = new LinkedHashMap<>();
+        firstExport.put("players/OldName.json", "old name\n");
+        firstExport.put("players-by-uuid/" + retainedUuid + ".json", "retained uuid\n");
+        firstExport.put("players/RemovedPlayer.json", "removed player\n");
+        firstExport.put("players-by-uuid/" + removedUuid + ".json", "removed uuid\n");
+        firstExport.put("index.json", "first index\n");
+        writer.write(base, firstExport);
+
+        Map<String, String> secondExport = new LinkedHashMap<>();
+        secondExport.put("players/NewName.json", "new name\n");
+        secondExport.put("players-by-uuid/" + retainedUuid + ".json", "retained uuid updated\n");
+        secondExport.put("index.json", "second index\n");
+        writer.write(base, secondExport);
+
+        assertFalse(Files.exists(base.resolve("players/OldName.json")));
+        assertFalse(Files.exists(base.resolve("players/RemovedPlayer.json")));
+        assertFalse(Files.exists(base.resolve("players-by-uuid/" + removedUuid + ".json")));
+        assertTrue(Files.exists(base.resolve("players/NewName.json")));
+        assertTrue(Files.exists(base.resolve("players-by-uuid/" + retainedUuid + ".json")));
+
+        assertEquals("unrelated\n", Files.readString(unrelatedFile));
+        assertEquals("unrelated uuid-shaped player file\n", Files.readString(unrelatedUuidPlayerFile));
+        assertEquals("unrelated uuid lookup\n", Files.readString(unrelatedUuidLookupFile));
+
+        Set<String> managed = ManagedExportManifest.parse(
+                Files.readString(base.resolve(ManagedExportManifest.FILE_NAME))
+        );
+        assertEquals(Set.of(
+                "players/NewName.json",
+                "players-by-uuid/" + retainedUuid + ".json",
+                "index.json"
+        ), managed);
+    }
+
+    @Test
+    void firstManifestExportDoesNotDeletePreexistingUntrackedOutput(@TempDir Path tempDir) throws Exception {
+        Path base = tempDir.resolve("export");
+        Path staleLookingFile = base.resolve("players/FormerPlayer.json");
+        Files.createDirectories(staleLookingFile.getParent());
+        Files.writeString(staleLookingFile, "preexisting\n");
+
+        new LocalExportWriter().write(base, Map.of(
+                "index.json", "current\n"
+        ));
+
+        assertEquals("preexisting\n", Files.readString(staleLookingFile));
+        assertEquals(Set.of("index.json"), ManagedExportManifest.parse(
+                Files.readString(base.resolve(ManagedExportManifest.FILE_NAME))
+        ));
     }
 
     @Test
