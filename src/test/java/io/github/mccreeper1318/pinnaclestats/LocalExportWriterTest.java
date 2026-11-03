@@ -156,6 +156,34 @@ class LocalExportWriterTest {
     }
 
     @Test
+    void preservesDesiredFileWhenStaleAndDesiredPathsReferToSameFilesystemEntry(@TempDir Path tempDir) throws Exception {
+        Path base = tempDir.resolve("export");
+        AtomicFileWriter atomicWriter = new AtomicFileWriter();
+        LocalExportWriter writer = new LocalExportWriter(
+                atomicWriter,
+                (first, second) -> first.toString().equalsIgnoreCase(second.toString())
+        );
+
+        writer.write(base, Map.of(
+                "players/Alice.json", "old\n",
+                "index.json", "first\n"
+        ));
+
+        writer.write(base, Map.of(
+                "players/ALICE.json", "new\n",
+                "index.json", "second\n"
+        ));
+
+        assertEquals("new\n", Files.readString(base.resolve("players/ALICE.json")));
+        assertEquals(Set.of(
+                "players/ALICE.json",
+                "index.json"
+        ), ManagedExportManifest.parse(
+                Files.readString(base.resolve(ManagedExportManifest.FILE_NAME))
+        ));
+    }
+
+    @Test
     void firstManifestExportDoesNotDeletePreexistingUntrackedOutput(@TempDir Path tempDir) throws Exception {
         Path base = tempDir.resolve("export");
         Path staleLookingFile = base.resolve("players/FormerPlayer.json");
