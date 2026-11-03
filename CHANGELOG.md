@@ -2,6 +2,12 @@
 
 All notable PinnacleStats changes are documented here. Historical entries are based on the published GitHub release notes and repository release history.
 
+## 1.1.1 - Unreleased
+
+### Dependencies
+
+- Updated `gradle-wrapper` from `9.8.0` to `9.8.2` via Dependabot ([#44](https://github.com/mccreeper1318/pinnaclestats/pull/44)).
+
 ## 1.1.0 - 2026-10-13
 
 ### Fixed
