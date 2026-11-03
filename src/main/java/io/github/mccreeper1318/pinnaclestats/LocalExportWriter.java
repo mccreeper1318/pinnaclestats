@@ -1,10 +1,13 @@
 package io.github.mccreeper1318.pinnaclestats;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Set;
 
 final class LocalExportWriter {
     private static final String INDEX_FILE = "index.json";
@@ -23,6 +26,9 @@ final class LocalExportWriter {
         Path normalizedBase = base.toAbsolutePath().normalize();
         Files.createDirectories(normalizedBase);
 
+        Set<String> previousManaged = readManagedFiles(normalizedBase);
+        Set<String> desiredManaged = new LinkedHashSet<>(files.keySet());
+
         String indexContent = null;
         for (Map.Entry<String, String> entry : files.entrySet()) {
             if (INDEX_FILE.equals(entry.getKey())) {
@@ -32,11 +38,29 @@ final class LocalExportWriter {
             atomicFileWriter.write(resolveExportPath(normalizedBase, entry.getKey()), entry.getValue());
         }
 
-        cleanUuidNamedPlayerFiles(normalizedBase);
-
         if (indexContent != null) {
             atomicFileWriter.write(resolveExportPath(normalizedBase, INDEX_FILE), indexContent);
         }
+
+        for (String stalePath : ManagedExportManifest.staleFiles(previousManaged, desiredManaged)) {
+            Path path = resolveExportPath(normalizedBase, stalePath);
+            if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(path)) {
+                Files.deleteIfExists(path);
+            }
+        }
+
+        atomicFileWriter.write(
+                resolveExportPath(normalizedBase, ManagedExportManifest.FILE_NAME),
+                ManagedExportManifest.serialize(desiredManaged)
+        );
+    }
+
+    private Set<String> readManagedFiles(Path base) throws IOException {
+        Path manifestPath = resolveExportPath(base, ManagedExportManifest.FILE_NAME);
+        if (!Files.isRegularFile(manifestPath, LinkOption.NOFOLLOW_LINKS)) {
+            return Set.of();
+        }
+        return ManagedExportManifest.parse(Files.readString(manifestPath, StandardCharsets.UTF_8));
     }
 
     private Path resolveExportPath(Path base, String relativePath) throws IOException {
@@ -45,34 +69,5 @@ final class LocalExportWriter {
             throw new IOException("Refusing to write outside export folder: " + relativePath);
         }
         return path;
-    }
-
-    private void cleanUuidNamedPlayerFiles(Path base) throws IOException {
-        Path playersDir = base.resolve("players").normalize();
-        if (!Files.isDirectory(playersDir) || !playersDir.startsWith(base)) return;
-
-        try (var stream = Files.list(playersDir)) {
-            for (Path path : stream.toList()) {
-                if (Files.isRegularFile(path) && isUuidFileName(stripJsonExtension(path.getFileName().toString()))) {
-                    Files.deleteIfExists(path);
-                }
-            }
-        }
-    }
-
-    private boolean isUuidFileName(String fileNameWithoutExtension) {
-        if (fileNameWithoutExtension == null) return false;
-        try {
-            UUID.fromString(fileNameWithoutExtension);
-            return true;
-        } catch (IllegalArgumentException ex) {
-            return false;
-        }
-    }
-
-    private String stripJsonExtension(String fileName) {
-        return fileName != null && fileName.endsWith(".json")
-                ? fileName.substring(0, fileName.length() - 5)
-                : fileName;
     }
 }
