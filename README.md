@@ -105,6 +105,8 @@ Run `/pstats export` to create or update these files without contacting GitHub.
 
 When `after-refresh` is enabled, automatic and command-triggered refreshes also update the local files.
 
+Each successful local export and GitHub publish writes a `.pinnaclestats-managed.json` manifest alongside the generated data. On later exports, PinnacleStats removes only files that were listed in the previous manifest but are no longer generated. Files that were never recorded as PinnacleStats-managed are left untouched.
+
 ## Player-name overrides
 
 PinnacleStats normally resolves names from the server's `usercache.json`. If a name cannot be resolved or a website needs a specific spelling, map the player's UUID:
