@@ -12,13 +12,20 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class StatsApiServer {
+    private static final int API_WORKER_THREADS = 4;
+    private static final int API_QUEUE_CAPACITY = 64;
+
     private final PinnacleStatsPlugin plugin;
     private final StatsCache cache;
     private volatile PluginSettings settings;
-    private HttpServer server;
+    private volatile HttpServer server;
+    private volatile ThreadPoolExecutor executor;
 
     public StatsApiServer(PinnacleStatsPlugin plugin, PluginSettings settings, StatsCache cache) {
         this.plugin = plugin;
@@ -29,33 +36,51 @@ public final class StatsApiServer {
     public synchronized void start() {
         if (!settings.apiEnabled()) return;
         if (server != null) return;
+
+        HttpServer createdServer = null;
+        ThreadPoolExecutor createdExecutor = null;
         try {
             InetSocketAddress address = new InetSocketAddress(settings.apiHost(), settings.apiPort());
-            server = HttpServer.create(address, 0);
-            server.createContext("/", this::handle);
-            server.setExecutor(Executors.newCachedThreadPool(r -> {
-                Thread thread = new Thread(r, "PinnacleStats-API");
-                thread.setDaemon(true);
-                return thread;
-            }));
-            server.start();
+            createdServer = HttpServer.create(address, 0);
+            createdExecutor = createApiExecutor();
+            createdServer.createContext("/", this::handle);
+            createdServer.setExecutor(createdExecutor);
+            createdServer.start();
+
+            server = createdServer;
+            executor = createdExecutor;
             plugin.getLogger().info("PinnacleStats API started on " + settings.apiHost() + ":" + settings.apiPort());
-        } catch (IOException ex) {
+        } catch (IOException | RuntimeException ex) {
+            if (createdServer != null) {
+                createdServer.stop(0);
+            }
+            if (createdExecutor != null) {
+                createdExecutor.shutdownNow();
+            }
             plugin.getLogger().severe("Could not start PinnacleStats API on port " + settings.apiPort() + ": " + ex.getMessage());
         }
     }
 
     public synchronized void stop() {
-        if (server != null) {
-            server.stop(0);
-            server = null;
+        HttpServer currentServer = server;
+        ThreadPoolExecutor currentExecutor = executor;
+        server = null;
+        executor = null;
+
+        if (currentServer != null) {
+            currentServer.stop(0);
+        }
+        if (currentExecutor != null) {
+            currentExecutor.shutdownNow();
+        }
+        if (currentServer != null || currentExecutor != null) {
             plugin.getLogger().info("PinnacleStats API stopped.");
         }
     }
 
     public synchronized void restart(PluginSettings newSettings) {
-        this.settings = newSettings;
         stop();
+        this.settings = newSettings;
         if (newSettings.apiEnabled()) start();
     }
 
@@ -63,51 +88,72 @@ public final class StatsApiServer {
         return server != null;
     }
 
+    static ThreadPoolExecutor createApiExecutor() {
+        AtomicInteger threadNumber = new AtomicInteger();
+        return new ThreadPoolExecutor(
+                API_WORKER_THREADS,
+                API_WORKER_THREADS,
+                0L,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(API_QUEUE_CAPACITY),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "PinnacleStats-API-" + threadNumber.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+    }
+
     private void handle(HttpExchange exchange) throws IOException {
-        applyCors(exchange);
-        if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
-            exchange.sendResponseHeaders(204, -1);
-            return;
-        }
-        if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-            send(exchange, 405, error("Only GET requests are allowed."));
-            return;
-        }
-
-        URI uri = exchange.getRequestURI();
-        String path = uri.getPath();
-
         try {
-            if (path.equals("/") || path.equals("/api") || path.equals("/api/health")) {
-                send(exchange, 200, health());
+            applyCors(exchange);
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(204, -1);
                 return;
             }
-            if (path.equals("/api/players")) {
-                send(exchange, 200, players());
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                send(exchange, 405, error("Only GET requests are allowed."));
                 return;
             }
-            if (path.startsWith("/api/player/uuid/")) {
-                String uuidText = decode(path.substring("/api/player/uuid/".length()));
-                UUID uuid;
-                try {
-                    uuid = UUID.fromString(uuidText);
-                } catch (IllegalArgumentException ex) {
-                    send(exchange, 400, error("Malformed player UUID."));
+
+            URI uri = exchange.getRequestURI();
+            String path = uri.getPath();
+
+            try {
+                if (path.equals("/") || path.equals("/api") || path.equals("/api/health")) {
+                    send(exchange, 200, health());
                     return;
                 }
-                Optional<StatsProfile> profile = cache.findByUuid(uuid);
-                send(exchange, profile.isPresent() ? 200 : 404, profile.map(StatsProfile::data).orElseGet(() -> error("Player UUID not found.")));
-                return;
+                if (path.equals("/api/players")) {
+                    send(exchange, 200, players());
+                    return;
+                }
+                if (path.startsWith("/api/player/uuid/")) {
+                    String uuidText = decode(path.substring("/api/player/uuid/".length()));
+                    UUID uuid;
+                    try {
+                        uuid = UUID.fromString(uuidText);
+                    } catch (IllegalArgumentException ex) {
+                        send(exchange, 400, error("Malformed player UUID."));
+                        return;
+                    }
+                    Optional<StatsProfile> profile = cache.findByUuid(uuid);
+                    send(exchange, profile.isPresent() ? 200 : 404, profile.map(StatsProfile::data).orElseGet(() -> error("Player UUID not found.")));
+                    return;
+                }
+                if (path.startsWith("/api/player/")) {
+                    String playerName = decode(path.substring("/api/player/".length()));
+                    Optional<StatsProfile> profile = cache.findByName(playerName);
+                    send(exchange, profile.isPresent() ? 200 : 404, profile.map(StatsProfile::data).orElseGet(() -> error("Player not found.")));
+                    return;
+                }
+                send(exchange, 404, error("Endpoint not found."));
+            } catch (Exception ex) {
+                send(exchange, 500, error("API error: " + ex.getMessage()));
             }
-            if (path.startsWith("/api/player/")) {
-                String playerName = decode(path.substring("/api/player/".length()));
-                Optional<StatsProfile> profile = cache.findByName(playerName);
-                send(exchange, profile.isPresent() ? 200 : 404, profile.map(StatsProfile::data).orElseGet(() -> error("Player not found.")));
-                return;
-            }
-            send(exchange, 404, error("Endpoint not found."));
-        } catch (Exception ex) {
-            send(exchange, 500, error("API error: " + ex.getMessage()));
+        } finally {
+            exchange.close();
         }
     }
 
