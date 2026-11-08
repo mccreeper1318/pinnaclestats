@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class StatsApiServer {
     private static final int API_WORKER_THREADS = 4;
     private static final int API_QUEUE_CAPACITY = 64;
+    private static final String REQUEST_TIMEOUT_PROPERTY = "sun.net.httpserver.maxReqTime";
+    private static final long DEFAULT_REQUEST_TIMEOUT_MILLIS = 10_000L;
 
     private final PinnacleStatsPlugin plugin;
     private final StatsCache cache;
@@ -40,6 +42,7 @@ public final class StatsApiServer {
         HttpServer createdServer = null;
         ThreadPoolExecutor createdExecutor = null;
         try {
+            configureRequestTimeout();
             InetSocketAddress address = new InetSocketAddress(settings.apiHost(), settings.apiPort());
             createdServer = HttpServer.create(address, 0);
             createdExecutor = createApiExecutor();
@@ -86,6 +89,19 @@ public final class StatsApiServer {
 
     public boolean isRunning() {
         return server != null;
+    }
+
+    static void configureRequestTimeout() {
+        String configured = System.getProperty(REQUEST_TIMEOUT_PROPERTY);
+        if (configured != null && !configured.isBlank()) {
+            try {
+                if (Long.parseLong(configured) > 0L) {
+                    return;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        System.setProperty(REQUEST_TIMEOUT_PROPERTY, Long.toString(DEFAULT_REQUEST_TIMEOUT_MILLIS));
     }
 
     static ThreadPoolExecutor createApiExecutor() {
