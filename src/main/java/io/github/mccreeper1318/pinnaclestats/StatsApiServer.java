@@ -21,7 +21,7 @@ public final class StatsApiServer {
     private static final int API_WORKER_THREADS = 4;
     private static final int API_QUEUE_CAPACITY = 64;
     private static final String REQUEST_TIMEOUT_PROPERTY = "sun.net.httpserver.maxReqTime";
-    private static final long DEFAULT_REQUEST_TIMEOUT_MILLIS = 10_000L;
+    private static final long DEFAULT_REQUEST_TIMEOUT_SECONDS = 10L;
 
     private final PinnacleStatsPlugin plugin;
     private final StatsCache cache;
@@ -101,7 +101,7 @@ public final class StatsApiServer {
             } catch (NumberFormatException ignored) {
             }
         }
-        System.setProperty(REQUEST_TIMEOUT_PROPERTY, Long.toString(DEFAULT_REQUEST_TIMEOUT_MILLIS));
+        System.setProperty(REQUEST_TIMEOUT_PROPERTY, Long.toString(DEFAULT_REQUEST_TIMEOUT_SECONDS));
     }
 
     static ThreadPoolExecutor createApiExecutor() {
