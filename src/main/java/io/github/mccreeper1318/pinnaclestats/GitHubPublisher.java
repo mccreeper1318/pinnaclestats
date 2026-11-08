@@ -5,9 +5,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Flow;
 
 public final class GitHubPublisher {
     private static final int MAX_BRANCH_HEAD_ATTEMPTS = 3;
@@ -236,7 +239,7 @@ public final class GitHubPublisher {
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                lastResponse = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                lastResponse = client.send(request, limitedUtf8BodyHandler(MiniJson.MAX_INPUT_BYTES));
                 Map<String, List<String>> headers = lastResponse.headers().map();
                 String responseBody = lastResponse.body();
                 if (!GitHubRetryPolicy.isRetryable(lastResponse.statusCode(), headers, responseBody) || attempt == maxAttempts) {
@@ -272,6 +275,70 @@ public final class GitHubPublisher {
 
         if (lastException != null) throw lastException;
         return lastResponse;
+    }
+
+    static HttpResponse.BodyHandler<String> limitedUtf8BodyHandler(int maxBytes) {
+        if (maxBytes < 1) throw new IllegalArgumentException("Maximum GitHub response size must be positive.");
+        return ignored -> new LimitedUtf8BodySubscriber(maxBytes);
+    }
+
+    private static final class LimitedUtf8BodySubscriber implements HttpResponse.BodySubscriber<String> {
+        private final int maxBytes;
+        private final HttpResponse.BodySubscriber<String> delegate =
+                HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8);
+        private Flow.Subscription subscription;
+        private long receivedBytes;
+        private boolean finished;
+
+        private LimitedUtf8BodySubscriber(int maxBytes) {
+            this.maxBytes = maxBytes;
+        }
+
+        @Override
+        public CompletionStage<String> getBody() {
+            return delegate.getBody();
+        }
+
+        @Override
+        public void onSubscribe(Flow.Subscription subscription) {
+            this.subscription = subscription;
+            delegate.onSubscribe(subscription);
+        }
+
+        @Override
+        public void onNext(List<ByteBuffer> item) {
+            if (finished) return;
+
+            long nextSize = receivedBytes;
+            for (ByteBuffer buffer : item) {
+                nextSize += buffer.remaining();
+                if (nextSize > maxBytes) {
+                    finished = true;
+                    subscription.cancel();
+                    delegate.onError(new IOException(
+                            "GitHub response JSON exceeds maximum size of " + maxBytes + " bytes."
+                    ));
+                    return;
+                }
+            }
+
+            receivedBytes = nextSize;
+            delegate.onNext(item);
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            if (finished) return;
+            finished = true;
+            delegate.onError(throwable);
+        }
+
+        @Override
+        public void onComplete() {
+            if (finished) return;
+            finished = true;
+            delegate.onComplete();
+        }
     }
 
     private boolean isBranchRefConflictStatus(int statusCode) {
