@@ -29,32 +29,42 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StatsApiServerTest {
     @Test
-    void configuresFiniteRequestTimeoutWhenUnsetOrDisabled() {
-        String key = "sun.net.httpserver.maxReqTime";
-        String previous = System.getProperty(key);
+    void configuresFiniteHttpTimeoutsWhenUnsetOrDisabled() {
+        String requestKey = "sun.net.httpserver.maxReqTime";
+        String responseKey = "sun.net.httpserver.maxRspTime";
+        String previousRequest = System.getProperty(requestKey);
+        String previousResponse = System.getProperty(responseKey);
         try {
-            System.clearProperty(key);
-            StatsApiServer.configureRequestTimeout();
-            assertEquals("10", System.getProperty(key));
+            System.clearProperty(requestKey);
+            System.setProperty(responseKey, "-1");
 
-            System.setProperty(key, "-1");
-            StatsApiServer.configureRequestTimeout();
-            assertEquals("10", System.getProperty(key));
+            StatsApiServer.configureHttpTimeouts();
+
+            assertEquals("10", System.getProperty(requestKey));
+            assertEquals("10", System.getProperty(responseKey));
         } finally {
-            restoreProperty(key, previous);
+            restoreProperty(requestKey, previousRequest);
+            restoreProperty(responseKey, previousResponse);
         }
     }
 
     @Test
-    void preservesPositiveRequestTimeoutOverride() {
-        String key = "sun.net.httpserver.maxReqTime";
-        String previous = System.getProperty(key);
+    void preservesPositiveHttpTimeoutOverrides() {
+        String requestKey = "sun.net.httpserver.maxReqTime";
+        String responseKey = "sun.net.httpserver.maxRspTime";
+        String previousRequest = System.getProperty(requestKey);
+        String previousResponse = System.getProperty(responseKey);
         try {
-            System.setProperty(key, "2500");
-            StatsApiServer.configureRequestTimeout();
-            assertEquals("2500", System.getProperty(key));
+            System.setProperty(requestKey, "25");
+            System.setProperty(responseKey, "30");
+
+            StatsApiServer.configureHttpTimeouts();
+
+            assertEquals("25", System.getProperty(requestKey));
+            assertEquals("30", System.getProperty(responseKey));
         } finally {
-            restoreProperty(key, previous);
+            restoreProperty(requestKey, previousRequest);
+            restoreProperty(responseKey, previousResponse);
         }
     }
 
