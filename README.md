@@ -16,9 +16,9 @@ PinnacleStats does not modify player statistics or gameplay.
 
 ## Requirements
 
-- PinnacleStats 1.1.0 targets Paper 26.3 stable.
+- PinnacleStats 1.1.1 targets Paper 26.3 stable.
 - Java 25.
-- PinnacleStats 1.1.0 is not intended for Paper 26.2 because its plugin API version is declared as `26.3`.
+- PinnacleStats 1.1.1 is not intended for Paper 26.2 because its plugin API version is declared as `26.3`.
 - Operator access or the `pinnaclestats.admin` permission for administrative commands.
 - A GitHub token only if GitHub publishing is enabled.
 
