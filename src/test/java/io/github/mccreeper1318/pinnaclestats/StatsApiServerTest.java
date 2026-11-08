@@ -15,11 +15,15 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StatsApiServerTest {
@@ -40,6 +44,38 @@ class StatsApiServerTest {
         }
 
         assertTrue(executor.isShutdown());
+    }
+
+    @Test
+    void saturatedExecutorRejectsOverflowWithoutRunningOnSubmittingThread() throws Exception {
+        ThreadPoolExecutor executor = StatsApiServer.createApiExecutor();
+        CountDownLatch releaseWorkers = new CountDownLatch(1);
+        AtomicBoolean overflowRan = new AtomicBoolean(false);
+
+        try {
+            for (int i = 0; i < 4; i++) {
+                executor.execute(() -> {
+                    try {
+                        releaseWorkers.await();
+                    } catch (InterruptedException ex) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            }
+
+            for (int i = 0; i < 64; i++) {
+                executor.execute(() -> {
+                });
+            }
+
+            assertThrows(RejectedExecutionException.class, () ->
+                    executor.execute(() -> overflowRan.set(true))
+            );
+            assertFalse(overflowRan.get());
+        } finally {
+            releaseWorkers.countDown();
+            executor.shutdownNow();
+        }
     }
 
     @Test
