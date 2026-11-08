@@ -105,7 +105,7 @@ public final class StatsApiServer {
         );
     }
 
-    private void handle(HttpExchange exchange) throws IOException {
+    void handle(HttpExchange exchange) throws IOException {
         try {
             applyCors(exchange);
             if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
