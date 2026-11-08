@@ -29,6 +29,36 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StatsApiServerTest {
     @Test
+    void configuresFiniteRequestTimeoutWhenUnsetOrDisabled() {
+        String key = "sun.net.httpserver.maxReqTime";
+        String previous = System.getProperty(key);
+        try {
+            System.clearProperty(key);
+            StatsApiServer.configureRequestTimeout();
+            assertEquals("10000", System.getProperty(key));
+
+            System.setProperty(key, "-1");
+            StatsApiServer.configureRequestTimeout();
+            assertEquals("10000", System.getProperty(key));
+        } finally {
+            restoreProperty(key, previous);
+        }
+    }
+
+    @Test
+    void preservesPositiveRequestTimeoutOverride() {
+        String key = "sun.net.httpserver.maxReqTime";
+        String previous = System.getProperty(key);
+        try {
+            System.setProperty(key, "2500");
+            StatsApiServer.configureRequestTimeout();
+            assertEquals("2500", System.getProperty(key));
+        } finally {
+            restoreProperty(key, previous);
+        }
+    }
+
+    @Test
     void apiExecutorHasBoundedDaemonWorkers() throws Exception {
         ThreadPoolExecutor executor = StatsApiServer.createApiExecutor();
         try {
@@ -88,6 +118,14 @@ class StatsApiServerTest {
 
         assertEquals(204, exchange.responseCode);
         assertTrue(exchange.closed);
+    }
+
+    private void restoreProperty(String key, String value) {
+        if (value == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, value);
+        }
     }
 
     private PluginSettings testSettings() {
