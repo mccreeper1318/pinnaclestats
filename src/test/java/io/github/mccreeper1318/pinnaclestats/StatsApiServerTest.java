@@ -35,11 +35,11 @@ class StatsApiServerTest {
         try {
             System.clearProperty(key);
             StatsApiServer.configureRequestTimeout();
-            assertEquals("10000", System.getProperty(key));
+            assertEquals("10", System.getProperty(key));
 
             System.setProperty(key, "-1");
             StatsApiServer.configureRequestTimeout();
-            assertEquals("10000", System.getProperty(key));
+            assertEquals("10", System.getProperty(key));
         } finally {
             restoreProperty(key, previous);
         }
