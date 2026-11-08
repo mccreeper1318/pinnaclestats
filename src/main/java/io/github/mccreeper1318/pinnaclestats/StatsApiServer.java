@@ -101,7 +101,7 @@ public final class StatsApiServer {
                     thread.setDaemon(true);
                     return thread;
                 },
-                new ThreadPoolExecutor.CallerRunsPolicy()
+                new ThreadPoolExecutor.AbortPolicy()
         );
     }
 
