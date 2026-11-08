@@ -4,6 +4,10 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 ## 1.1.1 - Unreleased
 
+### Changed
+
+- Added managed export cleanup so obsolete player files are pruned without deleting unrelated files ([#13](https://github.com/mccreeper1318/pinnaclestats/issues/13)).
+
 ### Dependencies
 
 - Updated `gradle-wrapper` from `9.8.0` to `9.8.2` via Dependabot ([#44](https://github.com/mccreeper1318/pinnaclestats/pull/44)).
