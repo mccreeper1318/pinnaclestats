@@ -7,7 +7,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 ### Changed
 
 - Added managed export cleanup so obsolete player files are pruned without deleting unrelated files (#13).
-- Bounded API worker threads and request/response time, and shut down the API executor on stop or reload (#14)).
+- Bounded API worker threads and request/response time, and shut down the API executor on stop or reload (#14).
 - Rejected malformed, oversized, and excessively nested JSON input (#15).
 
 ### Dependencies
