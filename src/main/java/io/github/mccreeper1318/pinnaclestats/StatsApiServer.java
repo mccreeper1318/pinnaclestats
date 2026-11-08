@@ -21,7 +21,8 @@ public final class StatsApiServer {
     private static final int API_WORKER_THREADS = 4;
     private static final int API_QUEUE_CAPACITY = 64;
     private static final String REQUEST_TIMEOUT_PROPERTY = "sun.net.httpserver.maxReqTime";
-    private static final long DEFAULT_REQUEST_TIMEOUT_SECONDS = 10L;
+    private static final String RESPONSE_TIMEOUT_PROPERTY = "sun.net.httpserver.maxRspTime";
+    private static final long DEFAULT_HTTP_TIMEOUT_SECONDS = 10L;
 
     private final PinnacleStatsPlugin plugin;
     private final StatsCache cache;
@@ -42,7 +43,7 @@ public final class StatsApiServer {
         HttpServer createdServer = null;
         ThreadPoolExecutor createdExecutor = null;
         try {
-            configureRequestTimeout();
+            configureHttpTimeouts();
             InetSocketAddress address = new InetSocketAddress(settings.apiHost(), settings.apiPort());
             createdServer = HttpServer.create(address, 0);
             createdExecutor = createApiExecutor();
@@ -91,8 +92,13 @@ public final class StatsApiServer {
         return server != null;
     }
 
-    static void configureRequestTimeout() {
-        String configured = System.getProperty(REQUEST_TIMEOUT_PROPERTY);
+    static void configureHttpTimeouts() {
+        configurePositiveTimeout(REQUEST_TIMEOUT_PROPERTY);
+        configurePositiveTimeout(RESPONSE_TIMEOUT_PROPERTY);
+    }
+
+    private static void configurePositiveTimeout(String property) {
+        String configured = System.getProperty(property);
         if (configured != null && !configured.isBlank()) {
             try {
                 if (Long.parseLong(configured) > 0L) {
@@ -101,7 +107,7 @@ public final class StatsApiServer {
             } catch (NumberFormatException ignored) {
             }
         }
-        System.setProperty(REQUEST_TIMEOUT_PROPERTY, Long.toString(DEFAULT_REQUEST_TIMEOUT_SECONDS));
+        System.setProperty(property, Long.toString(DEFAULT_HTTP_TIMEOUT_SECONDS));
     }
 
     static ThreadPoolExecutor createApiExecutor() {
