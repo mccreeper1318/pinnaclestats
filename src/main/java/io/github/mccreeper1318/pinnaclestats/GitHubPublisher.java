@@ -5,9 +5,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Flow;
 
 public final class GitHubPublisher {
     private static final int MAX_BRANCH_HEAD_ATTEMPTS = 3;
@@ -54,11 +57,10 @@ public final class GitHubPublisher {
         Map<String, TreeFile> existingFiles = getRecursiveTree(cfg, baseCommit.treeSha());
 
         List<Map<String, Object>> treeEntries = new ArrayList<>();
-        Set<String> desiredRepoPaths = new HashSet<>();
+        Set<String> desiredManaged = new LinkedHashSet<>(relativeFiles.keySet());
 
         for (Map.Entry<String, String> entry : relativeFiles.entrySet()) {
             String repoPath = combinePath(basePath, entry.getKey());
-            desiredRepoPaths.add(repoPath);
             treeEntries.add(mapOf(
                     "path", repoPath,
                     "mode", "100644",
@@ -67,29 +69,29 @@ public final class GitHubPublisher {
             ));
         }
 
-        int staleUuidDeletes = 0;
-        String playersPrefix = combinePath(basePath, "players/");
-        for (TreeFile file : existingFiles.values()) {
-            if (!"blob".equals(file.type())) continue;
-            if (!file.path().startsWith(playersPrefix)) continue;
-            String name = file.path().substring(playersPrefix.length());
-            if (name.contains("/")) continue;
-            if (!name.endsWith(".json")) continue;
-            String withoutJson = name.substring(0, name.length() - 5);
-            if (!isUuidFileName(withoutJson)) continue;
-            if (desiredRepoPaths.contains(file.path())) continue;
+        String manifestRepoPath = combinePath(basePath, ManagedExportManifest.FILE_NAME);
+        Set<String> previousManaged = readManagedFiles(cfg, existingFiles.get(manifestRepoPath));
+
+        int staleDeletes = 0;
+        for (String staleRelativePath : ManagedExportManifest.staleFiles(previousManaged, desiredManaged)) {
+            String repoPath = combinePath(basePath, staleRelativePath);
+            TreeFile existing = existingFiles.get(repoPath);
+            if (existing == null || !"blob".equals(existing.type())) continue;
             treeEntries.add(mapOf(
-                    "path", file.path(),
+                    "path", repoPath,
                     "mode", "100644",
                     "type", "blob",
                     "sha", null
             ));
-            staleUuidDeletes++;
+            staleDeletes++;
         }
 
-        if (treeEntries.isEmpty()) {
-            return new PublishResult(true, "GitHub publish skipped. No files needed publishing.");
-        }
+        treeEntries.add(mapOf(
+                "path", manifestRepoPath,
+                "mode", "100644",
+                "type", "blob",
+                "content", ManagedExportManifest.serialize(desiredManaged)
+        ));
 
         String newTreeSha = createTree(cfg, baseCommit.treeSha(), treeEntries);
         if (newTreeSha.equals(baseCommit.treeSha())) {
@@ -101,7 +103,7 @@ public final class GitHubPublisher {
 
         return new PublishResult(true,
                 "GitHub publish complete in one commit. Published " + relativeFiles.size()
-                        + " stat file(s), deleted " + staleUuidDeletes + " stale UUID player file(s).");
+                        + " stat file(s), deleted " + staleDeletes + " stale managed file(s).");
     }
 
     private RefInfo getBranchRef(PluginSettings cfg) throws IOException, InterruptedException {
@@ -148,6 +150,34 @@ public final class GitHubPublisher {
             files.put(String.valueOf(path), new TreeFile(String.valueOf(path), String.valueOf(type), String.valueOf(sha)));
         }
         return files;
+    }
+
+    private Set<String> readManagedFiles(PluginSettings cfg, TreeFile manifestFile) throws IOException, InterruptedException {
+        if (manifestFile == null || !"blob".equals(manifestFile.type())) {
+            return Set.of();
+        }
+        return ManagedExportManifest.parse(getBlobContent(cfg, manifestFile.sha()));
+    }
+
+    private String getBlobContent(PluginSettings cfg, String blobSha) throws IOException, InterruptedException {
+        URI uri = apiUri(cfg, "/git/blobs/" + encSegment(blobSha));
+        HttpResponse<String> response = send(cfg, baseRequest(cfg, uri).GET().build());
+        require2xx(response, "GitHub manifest blob GET");
+
+        Object parsed = MiniJson.parse(response.body());
+        if (!(parsed instanceof Map<?, ?> map)) throw new IOException("Bad GitHub blob response.");
+        Object encoding = map.get("encoding");
+        Object content = map.get("content");
+        if (!"base64".equals(String.valueOf(encoding)) || content == null) {
+            throw new IOException("GitHub manifest blob was not returned as base64 content.");
+        }
+
+        try {
+            byte[] decoded = Base64.getMimeDecoder().decode(String.valueOf(content));
+            return new String(decoded, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException ex) {
+            throw new IOException("Could not decode GitHub managed-file manifest.", ex);
+        }
     }
 
     private String createTree(PluginSettings cfg, String baseTreeSha, List<Map<String, Object>> treeEntries) throws IOException, InterruptedException {
@@ -209,7 +239,7 @@ public final class GitHubPublisher {
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                lastResponse = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                lastResponse = client.send(request, limitedUtf8BodyHandler(MiniJson.MAX_INPUT_BYTES));
                 Map<String, List<String>> headers = lastResponse.headers().map();
                 String responseBody = lastResponse.body();
                 if (!GitHubRetryPolicy.isRetryable(lastResponse.statusCode(), headers, responseBody) || attempt == maxAttempts) {
@@ -247,6 +277,70 @@ public final class GitHubPublisher {
         return lastResponse;
     }
 
+    static HttpResponse.BodyHandler<String> limitedUtf8BodyHandler(int maxBytes) {
+        if (maxBytes < 1) throw new IllegalArgumentException("Maximum GitHub response size must be positive.");
+        return ignored -> new LimitedUtf8BodySubscriber(maxBytes);
+    }
+
+    private static final class LimitedUtf8BodySubscriber implements HttpResponse.BodySubscriber<String> {
+        private final int maxBytes;
+        private final HttpResponse.BodySubscriber<String> delegate =
+                HttpResponse.BodySubscribers.ofString(StandardCharsets.UTF_8);
+        private Flow.Subscription subscription;
+        private long receivedBytes;
+        private boolean finished;
+
+        private LimitedUtf8BodySubscriber(int maxBytes) {
+            this.maxBytes = maxBytes;
+        }
+
+        @Override
+        public CompletionStage<String> getBody() {
+            return delegate.getBody();
+        }
+
+        @Override
+        public void onSubscribe(Flow.Subscription subscription) {
+            this.subscription = subscription;
+            delegate.onSubscribe(subscription);
+        }
+
+        @Override
+        public void onNext(List<ByteBuffer> item) {
+            if (finished) return;
+
+            long nextSize = receivedBytes;
+            for (ByteBuffer buffer : item) {
+                nextSize += buffer.remaining();
+                if (nextSize > maxBytes) {
+                    finished = true;
+                    subscription.cancel();
+                    delegate.onError(new IOException(
+                            "GitHub response JSON exceeds maximum size of " + maxBytes + " bytes."
+                    ));
+                    return;
+                }
+            }
+
+            receivedBytes = nextSize;
+            delegate.onNext(item);
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            if (finished) return;
+            finished = true;
+            delegate.onError(throwable);
+        }
+
+        @Override
+        public void onComplete() {
+            if (finished) return;
+            finished = true;
+            delegate.onComplete();
+        }
+    }
+
     private boolean isBranchRefConflictStatus(int statusCode) {
         return statusCode == 409 || statusCode == 422;
     }
@@ -276,16 +370,6 @@ public final class GitHubPublisher {
                 .header("X-GitHub-Api-Version", "2022-11-28")
                 .header("User-Agent", "PinnacleStats-Paper-Plugin")
                 .header("Content-Type", "application/json");
-    }
-
-    private boolean isUuidFileName(String fileNameWithoutExtension) {
-        if (fileNameWithoutExtension == null) return false;
-        try {
-            UUID.fromString(fileNameWithoutExtension);
-            return true;
-        } catch (IllegalArgumentException ex) {
-            return false;
-        }
     }
 
     private String combinePath(String base, String rel) {

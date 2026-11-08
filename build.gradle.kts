@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "io.github.mccreeper1318"
-version = providers.gradleProperty("releaseVersion").orElse("1.1.0").get()
+version = providers.gradleProperty("releaseVersion").orElse("1.1.1").get()
 
 java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(25))

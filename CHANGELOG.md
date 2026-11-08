@@ -2,7 +2,19 @@
 
 All notable PinnacleStats changes are documented here. Historical entries are based on the published GitHub release notes and repository release history.
 
-## 1.1.0 - 2026-10-13
+## 1.1.1
+
+### Changed
+
+- Added managed export cleanup so obsolete player files are pruned without deleting unrelated files (#13).
+- Bounded API worker threads and request/response time, and shut down the API executor on stop or reload (#14).
+- Rejected malformed, oversized, and excessively nested JSON input (#15).
+
+### Dependencies
+
+- Updated `gradle-wrapper` from `9.8.0` to `9.8.2` via Dependabot (#44).
+
+## 1.1.0
 
 ### Fixed
 
@@ -25,7 +37,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Updated `actions/setup-java` from `5` to `6` via Dependabot ([#28](https://github.com/mccreeper1318/pinnaclestats/pull/28)).
 - Updated `gradle-wrapper` from `9.7.1` to `9.8.0` via Dependabot ([#41](https://github.com/mccreeper1318/pinnaclestats/pull/41)).
 
-## 1.0.13 - 2026-09-09
+## 1.0.13
 
 ### Fixed
 
@@ -51,7 +63,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Updated `gradle-wrapper` from `9.3.0` to `9.7.1`
 - Updated `org.junit:junit-bom` from `5.13.4` to `6.1.3`
 
-## [1.0.11] - 2026-08-30
+## 1.0.11
 
 ### Fixed
 
@@ -74,7 +86,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Added unit coverage for refresh-request coalescing and worker scheduling.
 - Added a beginner-friendly step-by-step guide for installation, GitHub Pages, externally hosted static sites, and the optional HTTP API.
 
-## [1.0.10] - 2026-07-17
+## 1.0.10
 
 ### Fixed
 
@@ -84,7 +96,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 - No configuration changes were required between 1.0.8 and 1.0.10.
 
-## [1.0.9] - 2026-07-16
+## 1.0.9
 
 ### Added
 
@@ -94,7 +106,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 - Improved GitHub 503/Unicorn error messages so temporary GitHub availability or overload is clearer.
 
-## [1.0.8] - 2026-07-01
+## 1.0.8
 
 ### Fixed
 
@@ -112,7 +124,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 - Added github.publish-after-refresh, defaulting to false.
 
-## [1.0.7] - 2026-07-01
+## 1.0.7
 
 ### Fixed
 
@@ -123,14 +135,14 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Kept the Java 25 toolchain and updated plugin metadata to 1.0.7.
 - No gameplay, export, GitHub publishing, or profile JSON behavior changed from 1.0.6.
 
-## [1.0.6] - 2026-07-01
+## 1.0.6
 
 ### Changed
 
 - Updated the project and Gradle toolchain to Java 25 for Paper 26.2.
 - Updated packaged plugin metadata to 1.0.6 while retaining 1.0.5 functionality, player-name overrides, and UUID filename cleanup.
 
-## [1.0.5] - 2026-06-27
+## 1.0.5
 
 ### Added
 
@@ -141,7 +153,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Kept UUID lookup files under players-by-uuid/, but stopped publishing UUID-named files into the website-facing players/ directory.
 - Added cleanup of stale UUID-named files from local and GitHub players/ export folders.
 
-## [1.0.4] - 2026-06-27
+## 1.0.4
 
 ### Added
 
@@ -152,7 +164,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 
 - Fixed exports that created only index.json without player statistic files.
 
-## [1.0.3] - 2026-06-27
+## 1.0.3
 
 ### Fixed
 
@@ -160,14 +172,14 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Fixed plugin startup disablement and restored /pstats command availability.
 - Improved Paper server compatibility.
 
-## [1.0.2] - 2026-06-27
+## 1.0.2
 
 ### Fixed
 
 - Fixed the plugin.yml API version configuration that prevented the plugin from loading.
 - Improved Paper 26.2 loading reliability.
 
-## [1.0.1] - 2026-06-27
+## 1.0.1
 
 ### Added
 
@@ -179,7 +191,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 - Made static JSON publishing the recommended setup and disabled the live API by default.
 - Kept deaths and player kills enabled for public display.
 
-## [1.0.0] - 2026-06-27
+## 1.0.0
 
 ### Added
 

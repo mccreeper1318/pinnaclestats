@@ -16,9 +16,9 @@ PinnacleStats does not modify player statistics or gameplay.
 
 ## Requirements
 
-- PinnacleStats 1.1.0 targets Paper 26.3 stable.
+- PinnacleStats 1.1.1 targets Paper 26.3 stable.
 - Java 25.
-- PinnacleStats 1.1.0 is not intended for Paper 26.2 because its plugin API version is declared as `26.3`.
+- PinnacleStats 1.1.1 is not intended for Paper 26.2 because its plugin API version is declared as `26.3`.
 - Operator access or the `pinnaclestats.admin` permission for administrative commands.
 - A GitHub token only if GitHub publishing is enabled.
 
@@ -104,6 +104,8 @@ The export directory contains:
 Run `/pstats export` to create or update these files without contacting GitHub.
 
 When `after-refresh` is enabled, automatic and command-triggered refreshes also update the local files.
+
+Each successful local export and GitHub publish writes a `.pinnaclestats-managed.json` manifest alongside the generated data. On later exports, PinnacleStats removes only files that were listed in the previous manifest but are no longer generated. Files that were never recorded as PinnacleStats-managed are left untouched.
 
 ## Player-name overrides
 
