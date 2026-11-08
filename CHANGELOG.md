@@ -7,7 +7,7 @@ All notable PinnacleStats changes are documented here. Historical entries are ba
 ### Changed
 
 - Added managed export cleanup so obsolete player files are pruned without deleting unrelated files ([#13](https://github.com/mccreeper1318/pinnaclestats/issues/13)).
-- Bounded API worker threads and request time, and shut down the API executor on stop or reload ([#14](https://github.com/mccreeper1318/pinnaclestats/issues/14)).
+- Bounded API worker threads and request/response time, and shut down the API executor on stop or reload ([#14](https://github.com/mccreeper1318/pinnaclestats/issues/14)).
 
 ### Dependencies
 
