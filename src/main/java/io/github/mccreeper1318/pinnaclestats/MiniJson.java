@@ -1,12 +1,37 @@
 package io.github.mccreeper1318.pinnaclestats;
 
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public final class MiniJson {
+    static final int MAX_INPUT_BYTES = 16 * 1024 * 1024;
+    static final int MAX_NESTING_DEPTH = 64;
+
     private MiniJson() {}
 
     public static Object parse(String json) {
-        return new Parser(json).parseValue();
+        return parse(json, MAX_INPUT_BYTES, MAX_NESTING_DEPTH);
+    }
+
+    static Object parse(String json, int maxInputBytes, int maxNestingDepth) {
+        if (maxInputBytes < 1) throw new IllegalArgumentException("Maximum JSON input size must be positive.");
+        if (maxNestingDepth < 1) throw new IllegalArgumentException("Maximum JSON nesting depth must be positive.");
+
+        String input = json == null ? "" : json;
+        requireInputSize(input.getBytes(StandardCharsets.UTF_8).length, maxInputBytes);
+        return new Parser(input, maxNestingDepth).parseDocument();
+    }
+
+    static void requireInputSize(long inputBytes) {
+        requireInputSize(inputBytes, MAX_INPUT_BYTES);
+    }
+
+    private static void requireInputSize(long inputBytes, int maxInputBytes) {
+        if (inputBytes > maxInputBytes) {
+            throw new IllegalArgumentException(
+                    "JSON input exceeds maximum size of " + maxInputBytes + " bytes (received " + inputBytes + ")."
+            );
+        }
     }
 
     public static String stringify(Object value) {
@@ -82,17 +107,30 @@ public final class MiniJson {
 
     private static final class Parser {
         private final String s;
+        private final int maxNestingDepth;
         private int pos;
 
-        Parser(String s) { this.s = s == null ? "" : s; }
+        Parser(String s, int maxNestingDepth) {
+            this.s = s;
+            this.maxNestingDepth = maxNestingDepth;
+        }
 
-        Object parseValue() {
+        Object parseDocument() {
+            Object value = parseValue(0);
+            skipWhitespace();
+            if (pos != s.length()) {
+                throw error("Trailing content after JSON document");
+            }
+            return value;
+        }
+
+        private Object parseValue(int depth) {
             skipWhitespace();
             if (pos >= s.length()) throw error("Unexpected end of JSON");
             char c = s.charAt(pos);
             return switch (c) {
-                case '{' -> parseObject();
-                case '[' -> parseArray();
+                case '{' -> parseObject(nextDepth(depth));
+                case '[' -> parseArray(nextDepth(depth));
                 case '"' -> parseString();
                 case 't' -> { expect("true"); yield Boolean.TRUE; }
                 case 'f' -> { expect("false"); yield Boolean.FALSE; }
@@ -104,7 +142,15 @@ public final class MiniJson {
             };
         }
 
-        private Map<String, Object> parseObject() {
+        private int nextDepth(int currentDepth) {
+            int next = currentDepth + 1;
+            if (next > maxNestingDepth) {
+                throw error("JSON nesting exceeds maximum depth of " + maxNestingDepth);
+            }
+            return next;
+        }
+
+        private Map<String, Object> parseObject(int depth) {
             expect('{');
             LinkedHashMap<String, Object> map = new LinkedHashMap<>();
             skipWhitespace();
@@ -117,7 +163,7 @@ public final class MiniJson {
                 String key = parseString();
                 skipWhitespace();
                 expect(':');
-                Object value = parseValue();
+                Object value = parseValue(depth);
                 map.put(key, value);
                 skipWhitespace();
                 if (peek('}')) {
@@ -128,7 +174,7 @@ public final class MiniJson {
             }
         }
 
-        private List<Object> parseArray() {
+        private List<Object> parseArray(int depth) {
             expect('[');
             ArrayList<Object> list = new ArrayList<>();
             skipWhitespace();
@@ -137,7 +183,7 @@ public final class MiniJson {
                 return list;
             }
             while (true) {
-                list.add(parseValue());
+                list.add(parseValue(depth));
                 skipWhitespace();
                 if (peek(']')) {
                     pos++;
@@ -168,12 +214,17 @@ public final class MiniJson {
                         case 'u' -> {
                             if (pos + 4 > s.length()) throw error("Bad unicode escape");
                             String hex = s.substring(pos, pos + 4);
-                            out.append((char) Integer.parseInt(hex, 16));
+                            try {
+                                out.append((char) Integer.parseInt(hex, 16));
+                            } catch (NumberFormatException ex) {
+                                throw error("Bad unicode escape");
+                            }
                             pos += 4;
                         }
                         default -> throw error("Bad escape: " + e);
                     }
                 } else {
+                    if (c < 0x20) throw error("Unescaped control character in string");
                     out.append(c);
                 }
             }
@@ -183,22 +234,39 @@ public final class MiniJson {
         private Number parseNumber() {
             int start = pos;
             if (peek('-')) pos++;
-            while (pos < s.length() && Character.isDigit(s.charAt(pos))) pos++;
+
+            if (peek('0')) {
+                pos++;
+            } else {
+                int digitStart = pos;
+                while (pos < s.length() && Character.isDigit(s.charAt(pos))) pos++;
+                if (digitStart == pos) throw error("Invalid number");
+            }
+
             boolean decimal = false;
             if (peek('.')) {
                 decimal = true;
                 pos++;
+                int fractionStart = pos;
                 while (pos < s.length() && Character.isDigit(s.charAt(pos))) pos++;
+                if (fractionStart == pos) throw error("Invalid number");
             }
             if (pos < s.length() && (s.charAt(pos) == 'e' || s.charAt(pos) == 'E')) {
                 decimal = true;
                 pos++;
                 if (pos < s.length() && (s.charAt(pos) == '+' || s.charAt(pos) == '-')) pos++;
+                int exponentStart = pos;
                 while (pos < s.length() && Character.isDigit(s.charAt(pos))) pos++;
+                if (exponentStart == pos) throw error("Invalid number");
             }
+
             String n = s.substring(start, pos);
-            if (decimal) return Double.parseDouble(n);
-            return Long.parseLong(n);
+            try {
+                if (decimal) return Double.parseDouble(n);
+                return Long.parseLong(n);
+            } catch (NumberFormatException ex) {
+                throw error("Invalid number");
+            }
         }
 
         private void expect(String text) {
@@ -224,7 +292,7 @@ public final class MiniJson {
             }
         }
 
-        private RuntimeException error(String message) {
+        private IllegalArgumentException error(String message) {
             return new IllegalArgumentException(message + " at position " + pos);
         }
     }

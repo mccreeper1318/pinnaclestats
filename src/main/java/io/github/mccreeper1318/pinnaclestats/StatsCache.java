@@ -191,8 +191,7 @@ public final class StatsCache {
 
     @SuppressWarnings("unchecked")
     private StatsProfile parseProfile(File file, UUID uuid, PluginSettings cfg, Map<UUID, String> userCacheNames) throws IOException {
-        String text = Files.readString(file.toPath(), StandardCharsets.UTF_8);
-        Object parsed = MiniJson.parse(text);
+        Object parsed = readJsonFile(file.toPath(), "stats file " + file.getName());
         if (!(parsed instanceof Map<?, ?> rootRaw)) {
             throw new IOException("Root JSON is not an object.");
         }
@@ -284,7 +283,7 @@ public final class StatsCache {
         File file = new File("usercache.json");
         if (!file.isFile()) return names;
         try {
-            Object parsed = MiniJson.parse(Files.readString(file.toPath(), StandardCharsets.UTF_8));
+            Object parsed = readJsonFile(file.toPath(), "usercache.json");
             if (!(parsed instanceof List<?> list)) return names;
             for (Object item : list) {
                 if (!(item instanceof Map<?, ?> raw)) continue;
@@ -304,6 +303,16 @@ public final class StatsCache {
                 plugin.getLogger().warning("Could not read usercache.json for player names: " + ex.getMessage());
             }
             return names;
+        }
+    }
+
+    private Object readJsonFile(java.nio.file.Path path, String description) throws IOException {
+        long size = Files.size(path);
+        try {
+            MiniJson.requireInputSize(size);
+            return MiniJson.parse(Files.readString(path, StandardCharsets.UTF_8));
+        } catch (IllegalArgumentException ex) {
+            throw new IOException("Invalid " + description + ": " + ex.getMessage(), ex);
         }
     }
 
